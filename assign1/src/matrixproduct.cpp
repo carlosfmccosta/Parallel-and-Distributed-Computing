@@ -48,7 +48,7 @@ void OnMult(int m_ar, int m_br)
 	}
 
 	Time2 = clock();
-	sprintf(st, "Time: %3.3f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
+	sprintf(st, "Time: %3.9f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
 	cout << st;
 
 	// display 10 elements of the result matrix tto verify correctness
