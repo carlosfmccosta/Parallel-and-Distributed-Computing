@@ -1,6 +1,5 @@
 import System.CPUTime
 import Text.Printf
-import Data.Time
 
 initMatrixA :: Int -> [[Double]]
 initMatrixA m_ar = replicate m_ar (replicate m_ar 1.0)
@@ -25,7 +24,7 @@ printMatrix matrix = mapM_ (putStrLn . unwords . map show) matrix
 
 main :: IO ()
 main = do
-    let m_ar = 500
+    let m_ar = 1000 
         m_br = m_ar 
         matrixA = initMatrixA m_ar
         matrixB = initMatrixB m_ar m_br
@@ -37,16 +36,7 @@ main = do
     end <- getCPUTime
 
     let diff = fromIntegral (end - start) / (10^12) :: Double
-
-    -- Display the result (optional)
-    putStrLn "Matrix A:"
-    printMatrix matrixA
-
-    putStrLn "\nMatrix B:"
-    printMatrix matrixB
-
-    putStrLn "\nResult Matrix (A × B):"
-    printMatrix resultMatrix
+    
 
     -- Print the time taken for matrix multiplication (in seconds)
     printf "\nTime taken for multiplication: %.9f seconds\n" diff
