@@ -60,7 +60,6 @@ updateMatrix :: Int -> Int -> Int -> [[Double]] -> [[Double]] -> [[Double]] -> [
 updateMatrix i j k result a bT = let updatedValue = (result !! i !! j) + (a !! i !! k) * (bT !! j !! k)
                                  in modifyMatrix result i j updatedValue
 
-
 modifyMatrix :: [[Double]] -> Int -> Int -> Double -> [[Double]]
 modifyMatrix matrix row col val = take row matrix ++ [take col (matrix !! row) ++ [val] ++ drop (col + 1) (matrix !! row)] ++ drop (row + 1) matrix
 
@@ -80,7 +79,7 @@ printMatrixFirstRow matrix = case matrix of
 
 main :: IO ()
 main = do
-    let m_ar = 100
+    let m_ar = 1000
         m_br = m_ar 
         matrixA = initMatrixA m_ar
         matrixB = initMatrixB m_ar m_br
