@@ -39,6 +39,14 @@ matrixMultiply a b = [[ dotProduct row col| col <- colsB] | row <- a]
 -- 2nd c/c++ way
 
 
+--onMultLine :: [[Double]] -> [[Double]] -> [[Double]]
+--onMultLine a b = multiply a (transpose b)
+
+--multiply :: [[Double]] -> [[Double]] -> [[Double]]
+--multiply a bT = [[ sum [ar !! k * bc !! k | k <- [0 .. length ar - 1]] | bc <- bT ] | ar <- a ]
+
+
+
 onMultLine :: [[Double]] -> [[Double]] -> [[Double]]
 onMultLine a b  = multiplyLoop 0 0 0 resultMatrix a bT
   where
