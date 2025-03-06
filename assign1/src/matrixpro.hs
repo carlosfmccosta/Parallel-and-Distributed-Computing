@@ -39,37 +39,13 @@ matrixMultiply a b = [[ dotProduct row col| col <- colsB] | row <- a]
 -- 2nd c/c++ way
 
 
---onMultLine :: [[Double]] -> [[Double]] -> [[Double]]
---onMultLine a b = multiply a (transpose b)
-
---multiply :: [[Double]] -> [[Double]] -> [[Double]]
---multiply a bT = [[ sum [ar !! k * bc !! k | k <- [0 .. length ar - 1]] | bc <- bT ] | ar <- a ]
-
-
-
 onMultLine :: [[Double]] -> [[Double]] -> [[Double]]
-onMultLine a b  = multiplyLoop 0 0 0 resultMatrix a bT
-  where
-    m_ar = length a        
-    m_br = length (head b) 
-    bT = transpose b       
-    resultMatrix = initZeroMatrix m_ar m_br
+onMultLine a b = multiply a (transpose b)
+multiply :: [[Double]] -> [[Double]] -> [[Double]]
+multiply a bT = [[ sum [ar !! k * bc !! k | k <- [0 .. length ar - 1]] | bc <- bT ] | ar <- a ]
 
 
-multiplyLoop :: Int -> Int -> Int -> [[Double]] -> [[Double]] -> [[Double]] -> [[Double]]
-multiplyLoop i j k result a bT
-  | i >= length a  = result 
-  | j >= length (head bT) = multiplyLoop (i + 1) 0 0 result a bT 
-  | k >= length a  = multiplyLoop i (j + 1) 0 result a bT  
-  | otherwise = multiplyLoop i j (k + 1) (updateMatrix i j k result a bT) a bT
 
-
-updateMatrix :: Int -> Int -> Int -> [[Double]] -> [[Double]] -> [[Double]] -> [[Double]]
-updateMatrix i j k result a bT = let updatedValue = (result !! i !! j) + (a !! i !! k) * (bT !! j !! k)
-                                 in modifyMatrix result i j updatedValue
-
-modifyMatrix :: [[Double]] -> Int -> Int -> Double -> [[Double]]
-modifyMatrix matrix row col val = take row matrix ++ [take col (matrix !! row) ++ [val] ++ drop (col + 1) (matrix !! row)] ++ drop (row + 1) matrix
 
 
 
