@@ -61,30 +61,34 @@ printMatrixFirstRow matrix = case matrix of
     (firstRow:_) -> putStrLn . unwords . map show $ take 10 firstRow
     []           -> putStrLn "Matrix is empty."
 
+-- ======= PRINTING AND TESTING ======
+
+writeResultsToFile :: String -> Int -> Double -> IO ()
+writeResultsToFile algorithm size time = do
+    let filename = "results.txt"
+    appendFile filename (printf "%s,%d,%.9f\n" algorithm size time)
+
+-- ======= MAIN FUNCTION =======
+
 main :: IO ()
 main = do
-    putStrLn "Enter matrix size (N x N): "
-    sizeInput <- getLine
-    let m_ar = read sizeInput :: Int
-        m_br = m_ar  -- Square matrix
+    let standardSizes = [600,600,600,600,600,1000,1000,1000,1000,1000,1400,1400,1400,1400,1400,1800,1800,1800,1800,1800,2200,2200,2200,2200,2200,2600,2600,2600,2600,2600,3000,3000,3000,3000,3000]
+    let lineSizes = [600,600,600,600,600,1000,1000,1000,1000,1000,1400,1400,1400,1400,1400,1800,1800,1800,1800,1800,2200,2200,2200,2200,2200,2600,2600,2600,2600,2600,3000,3000,3000,3000,3000,4096,4096,4096,4096,4096,6144,6144,6144,6144,6144,8192,8192,8192,8192,8192,10240,10240,10240,10240,10240]
 
-    putStrLn "\nChoose multiplication method:\n1 - Standard Multiplication\n2 - Line Multiplication"
-    methodInput <- getLine
-    let method = read methodInput :: Int
+    -- Run Standard Multiplication first
+    mapM_ (\size -> executeAndLog "Standard Multiplication" matrixMultiply size) standardSizes
 
-    let matrixA = initMatrixA m_ar
-        matrixB = initMatrixB m_ar m_br
+    -- Then run Line Multiplication
+    mapM_ (\size -> executeAndLog "Line Multiplication" onMultLine size) lineSizes
 
+    putStrLn "Results written to results.txt"
+
+executeAndLog :: String -> ([[Double]] -> [[Double]] -> [[Double]]) -> Int -> IO ()
+executeAndLog name func size = do
+    let matrixA = initMatrixA size
+        matrixB = initMatrixB size size
     start <- getCPUTime
-    let resultMatrix = case method of
-            1 -> matrixMultiply matrixA matrixB
-            2 -> onMultLine matrixA matrixB
-            _ -> error "Invalid option! Please choose 1 or 2."
+    let _ = func matrixA matrixB
     end <- getCPUTime
-
     let diff = fromIntegral (end - start) / (10^12) :: Double
-
-    putStrLn "\nFirst 10 elements of the first row of result matrix:"
-    printMatrixFirstRow resultMatrix
-
-    printf "\nTime taken for multiplication: %.9f seconds\n" diff
+    writeResultsToFile name size diff
