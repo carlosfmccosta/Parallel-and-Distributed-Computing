@@ -4,6 +4,7 @@
 #include <time.h>
 #include <cstdlib>
 #include <papi.h>
+#include <fstream>
 
 using namespace std;
 
@@ -229,12 +230,9 @@ void OnMultLineParallel(int m_ar, int m_br)
 	
 
     Time2 = clock();
-    cout << "Parallel Time: " << (double)(Time2 - Time1) / CLOCKS_PER_SEC << " seconds\n";
+    double elapsedTime = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 
-    cout << "Result matrix: " << endl;
-    for (int j = 0; j < min(10, m_br); j++)
-        cout << phc[j] << " ";
-    cout << endl;
+    outFile << "OnMultLineParallel, " << m_ar << ", " << elapsedTime << endl;
 
     free(pha);
     free(phb);
@@ -278,16 +276,10 @@ void OnMultLineParallel2(int m_ar, int m_br)
     }
 
     Time2 = clock();
-    sprintf(st, "Time: %3.9f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
-    cout << st;
+    double elapsedTime = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 
-    cout << "Result matrix: " << endl;
-    for (int i = 0; i < 1; i++)
-    {
-        for (int j = 0; j < min(10, m_br); j++)
-            cout << phc[j] << " ";
-    }
-    cout << endl;
+    outFile << "OnMultLineParallel2, " << m_ar << ", " << elapsedTime << endl;
+
 
     free(pha);
     free(phb);
@@ -317,96 +309,42 @@ void init_papi()
 			  << " REVISION: " << PAPI_VERSION_REVISION(retval) << "\n";
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    char c;
-    int lin, col, blockSize;
-    int op;
+    ofstream outFile("results.csv");
+    if (!outFile.is_open()) {
+        cerr << "Error opening file!" << endl;
+        return 1;
+    }
 
-    int EventSet = PAPI_NULL;
-    long long values[2];
-    int ret;
+    // Write header to file
+    outFile << "Function, Matrix Size, Time (seconds)" << endl;
 
-    ret = PAPI_library_init(PAPI_VER_CURRENT);
-    if (ret != PAPI_VER_CURRENT)
-        std::cout << "FAIL" << endl;
+    // Matrix sizes to test
+    int sizes[] = {600, 600, 600, 600, 600,
+                   1000, 1000, 1000, 1000, 1000,
+                   1400, 1400, 1400, 1400, 1400,
+                   1800, 1800, 1800, 1800, 1800,
+                   2200, 2200, 2200, 2200, 2200,
+                   2600, 2600, 2600, 2600, 2600,
+                   3000, 3000, 3000, 3000, 3000,
+                   4096, 4096, 4096, 4096, 4096,
+                   6144, 6144, 6144, 6144, 6144,
+                   8192, 8192, 8192, 8192, 8192,
+                   10240, 10240, 10240, 10240, 10240};
 
-    ret = PAPI_create_eventset(&EventSet);
-    if (ret != PAPI_OK)
-        cout << "ERROR: create eventset" << endl;
+    // Run OnMultLineParallel for all sizes
+    for (int size : sizes) {
+        OnMultLineParallel(size, size, outFile);
+    }
 
-    ret = PAPI_add_event(EventSet, PAPI_L1_DCM);
-    if (ret != PAPI_OK)
-        cout << "ERROR: PAPI_L1_DCM" << endl;
+    // Run OnMultLineParallel2 for all sizes
+    for (int size : sizes) {
+        OnMultLineParallel2(size, size, outFile);
+    }
 
-    ret = PAPI_add_event(EventSet, PAPI_L2_DCM);
-    if (ret != PAPI_OK)
-        cout << "ERROR: PAPI_L2_DCM" << endl;
+    outFile.close();
+    cout << "Results written to results.csv" << endl;
 
-    op = 1;
-    do
-    {
-        cout << endl
-             << "1. Multiplication" << endl;
-        cout << "2. Line Multiplication" << endl;
-        cout << "3. Block Multiplication" << endl;
-        cout << "4. Parallel Line Multiplication" << endl;
-        cout << "5. Parallel Line Multiplication (Optimized)" << endl;  // New option
-        cout << "Selection?: ";
-        cin >> op;
-        if (op == 0)
-            break;
-        printf("Dimensions: lins=cols ? ");
-        cin >> lin;
-        col = lin;
-
-        // Start counting
-        ret = PAPI_start(EventSet);
-        if (ret != PAPI_OK)
-            cout << "ERROR: Start PAPI" << endl;
-
-        switch (op)
-        {
-        case 1:
-            OnMult(lin, col);
-            break;
-        case 2:
-            OnMultLine(lin, col);
-            break;
-        case 3:
-            cout << "Block Size? ";
-            cin >> blockSize;
-            OnMultBlock(lin, col, blockSize);
-            break;
-        case 4:
-            OnMultLineParallel(lin, col);
-            break;
-        case 5:  // New case for Parallel Line Multiplication (Optimized)
-            OnMultLineParallel2(lin, col);
-            break;
-        }
-
-        ret = PAPI_stop(EventSet, values);
-        if (ret != PAPI_OK)
-            cout << "ERROR: Stop PAPI" << endl;
-        printf("L1 DCM: %lld \n", values[0]);
-        printf("L2 DCM: %lld \n", values[1]);
-
-        ret = PAPI_reset(EventSet);
-        if (ret != PAPI_OK)
-            std::cout << "FAIL reset" << endl;
-
-    } while (op != 0);
-
-    ret = PAPI_remove_event(EventSet, PAPI_L1_DCM);
-    if (ret != PAPI_OK)
-        std::cout << "FAIL remove event" << endl;
-
-    ret = PAPI_remove_event(EventSet, PAPI_L2_DCM);
-    if (ret != PAPI_OK)
-        std::cout << "FAIL remove event" << endl;
-
-    ret = PAPI_destroy_eventset(&EventSet);
-    if (ret != PAPI_OK)
-        std::cout << "FAIL destroy" << endl;
+    return 0;
 }
