@@ -63,21 +63,28 @@ printMatrixFirstRow matrix = case matrix of
 
 main :: IO ()
 main = do
-    let m_ar = 1000
-        m_br = m_ar 
-        matrixA = initMatrixA m_ar
+    putStrLn "Enter matrix size (N x N): "
+    sizeInput <- getLine
+    let m_ar = read sizeInput :: Int
+        m_br = m_ar  -- Square matrix
+
+    putStrLn "\nChoose multiplication method:\n1 - Standard Multiplication\n2 - Line Multiplication"
+    methodInput <- getLine
+    let method = read methodInput :: Int
+
+    let matrixA = initMatrixA m_ar
         matrixB = initMatrixB m_ar m_br
 
     start <- getCPUTime
-
-    let resultMatrix = onMultLine matrixA matrixB
-
+    let resultMatrix = case method of
+            1 -> matrixMultiply matrixA matrixB
+            2 -> onMultLine matrixA matrixB
+            _ -> error "Invalid option! Please choose 1 or 2."
     end <- getCPUTime
 
     let diff = fromIntegral (end - start) / (10^12) :: Double
-    
+
     putStrLn "\nFirst 10 elements of the first row of result matrix:"
     printMatrixFirstRow resultMatrix
 
-    -- Print the time taken for matrix multiplication (in seconds)
     printf "\nTime taken for multiplication: %.9f seconds\n" diff
