@@ -4,7 +4,6 @@
 #include <time.h>
 #include <cstdlib>
 #include <papi.h>
-#include <fstream>
 
 using namespace std;
 
@@ -193,12 +192,19 @@ void OnMultBlock(int m_ar, int m_br, int bkSize)
 	free(phc);
 }
 
-void OnMultLineParallel(int m_ar, int m_br)
-{
+void log_results(const char* function_name, int matrix_size, double execution_time, long long l1_dcm, long long l2_dcm) {
+    ofstream file("results.csv", ios::app);
+    if (file.is_open()) {
+        file << function_name << "," << matrix_size << "," << execution_time << "," << l1_dcm << "," << l2_dcm << "\n";
+        file.close();
+    } else {
+        cerr << "Error opening file for logging!" << endl;
+    }
+}
+
+void OnMultLineParallel(int m_ar, int m_br) {
     SYSTEMTIME Time1, Time2;
-
     double *pha, *phb, *phc;
-
     pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
@@ -215,6 +221,13 @@ void OnMultLineParallel(int m_ar, int m_br)
         for (int j = 0; j < m_br; j++)
             phc[i * m_br + j] = 0.0;
 
+    int EventSet = PAPI_NULL;
+    long long values[2];
+    PAPI_create_eventset(&EventSet);
+    PAPI_add_event(EventSet, PAPI_L1_DCM);
+    PAPI_add_event(EventSet, PAPI_L2_DCM);
+    PAPI_start(EventSet);
+
     Time1 = clock();
 
     #pragma omp parallel for
@@ -227,31 +240,26 @@ void OnMultLineParallel(int m_ar, int m_br)
         }
     }
 
-	
-
     Time2 = clock();
-    double elapsedTime = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+    PAPI_stop(EventSet, values);
+    double execution_time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+    log_results("OnMultLineParallel", m_ar, execution_time, values[0], values[1]);
 
-    outFile << "OnMultLineParallel, " << m_ar << ", " << elapsedTime << endl;
-
-    free(pha);
-    free(phb);
-    free(phc);
+    free(pha); free(phb); free(phc);
+    PAPI_reset(EventSet);
+    PAPI_destroy_eventset(&EventSet);
 }
 
-void OnMultLineParallel2(int m_ar, int m_br)
-{
+void OnMultLineParallel2(int m_ar, int m_br) {
     SYSTEMTIME Time1, Time2;
-    char st[100];
     double *pha, *phb, *phc;
-
     pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
 
     for (int i = 0; i < m_ar; i++)
         for (int j = 0; j < m_ar; j++)
-            pha[i * m_ar + j] = (double)1.0;
+            pha[i * m_ar + j] = 1.0;
 
     for (int i = 0; i < m_br; i++)
         for (int j = 0; j < m_br; j++)
@@ -261,13 +269,19 @@ void OnMultLineParallel2(int m_ar, int m_br)
         for (int j = 0; j < m_br; j++)
             phc[i * m_br + j] = 0.0;
 
+    int EventSet = PAPI_NULL;
+    long long values[2];
+    PAPI_create_eventset(&EventSet);
+    PAPI_add_event(EventSet, PAPI_L1_DCM);
+    PAPI_add_event(EventSet, PAPI_L2_DCM);
+    PAPI_start(EventSet);
+
     Time1 = clock();
 
     #pragma omp parallel for collapse(2)
     for (int i = 0; i < m_ar; i++) {         
         for (int k = 0; k < m_ar; k++) {     
             double A_ik = pha[i * m_ar + k];
-
             #pragma omp parallel for reduction(+:phc[i * m_br : m_br])
             for (int j = 0; j < m_br; j++) { 
                 phc[i * m_br + j] += A_ik * phb[k * m_br + j];
@@ -276,15 +290,15 @@ void OnMultLineParallel2(int m_ar, int m_br)
     }
 
     Time2 = clock();
-    double elapsedTime = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+    PAPI_stop(EventSet, values);
+    double execution_time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+    log_results("OnMultLineParallel2", m_ar, execution_time, values[0], values[1]);
 
-    outFile << "OnMultLineParallel2, " << m_ar << ", " << elapsedTime << endl;
-
-
-    free(pha);
-    free(phb);
-    free(phc);
+    free(pha); free(phb); free(phc);
+    PAPI_reset(EventSet);
+    PAPI_destroy_eventset(&EventSet);
 }
+
 
 
 void handle_error(int retval)
@@ -309,42 +323,18 @@ void init_papi()
 			  << " REVISION: " << PAPI_VERSION_REVISION(retval) << "\n";
 }
 
-int main()
-{
-    ofstream outFile("results.csv");
-    if (!outFile.is_open()) {
-        cerr << "Error opening file!" << endl;
-        return 1;
-    }
+int main() {
+    int sizes[] = {600, 1000, 1400, 1800, 2200, 2600, 3000, 4096, 6144, 8192, 10240};
+    ofstream logFile("matrix_mult_results.csv");
+    logFile << "Function,MatrixSize,Time,L1_DCM,L2_DCM\n";
+    logFile.close();
 
-    // Write header to file
-    outFile << "Function, Matrix Size, Time (seconds)" << endl;
-
-    // Matrix sizes to test
-    int sizes[] = {600, 600, 600, 600, 600,
-                   1000, 1000, 1000, 1000, 1000,
-                   1400, 1400, 1400, 1400, 1400,
-                   1800, 1800, 1800, 1800, 1800,
-                   2200, 2200, 2200, 2200, 2200,
-                   2600, 2600, 2600, 2600, 2600,
-                   3000, 3000, 3000, 3000, 3000,
-                   4096, 4096, 4096, 4096, 4096,
-                   6144, 6144, 6144, 6144, 6144,
-                   8192, 8192, 8192, 8192, 8192,
-                   10240, 10240, 10240, 10240, 10240};
-
-    // Run OnMultLineParallel for all sizes
     for (int size : sizes) {
-        OnMultLineParallel(size, size, outFile);
+        cout << "\nRunning tests for matrix size: " << size << "\n";
+        OnMultLineParallel(size, size);
+        OnMultLineParallel2(size, size);
     }
 
-    // Run OnMultLineParallel2 for all sizes
-    for (int size : sizes) {
-        OnMultLineParallel2(size, size, outFile);
-    }
-
-    outFile.close();
-    cout << "Results written to results.csv" << endl;
-
+    cout << "Tests completed! Results saved in 'matrix_mult_results.csv'.\n";
     return 0;
 }
