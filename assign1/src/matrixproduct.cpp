@@ -202,9 +202,12 @@ void log_results(const char* function_name, int matrix_size, double execution_ti
     }
 }
 
-void OnMultLineParallel(int m_ar, int m_br) {
+void OnMultLineParallel(int m_ar, int m_br) 
+{
+
     SYSTEMTIME Time1, Time2;
     double *pha, *phb, *phc;
+
     pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
@@ -250,9 +253,12 @@ void OnMultLineParallel(int m_ar, int m_br) {
     PAPI_destroy_eventset(&EventSet);
 }
 
-void OnMultLineParallel2(int m_ar, int m_br) {
+void OnMultLineParallel2(int m_ar, int m_br)
+ {
+
     SYSTEMTIME Time1, Time2;
     double *pha, *phb, *phc;
+
     pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
     phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
@@ -323,18 +329,97 @@ void init_papi()
 			  << " REVISION: " << PAPI_VERSION_REVISION(retval) << "\n";
 }
 
-int main() {
-    int sizes[] = {600, 1000, 1400, 1800, 2200, 2600, 3000, 4096, 6144, 8192, 10240};
-    ofstream logFile("matrix_mult_results.csv");
-    logFile << "Function,MatrixSize,Time,L1_DCM,L2_DCM\n";
-    logFile.close();
 
-    for (int size : sizes) {
-        cout << "\nRunning tests for matrix size: " << size << "\n";
-        OnMultLineParallel(size, size);
-        OnMultLineParallel2(size, size);
-    }
+int main(int argc, char *argv[])
+{
+    char c;
+    int lin, col, blockSize;
+    int op;
 
-    cout << "Tests completed! Results saved in 'matrix_mult_results.csv'.\n";
-    return 0;
+    int EventSet = PAPI_NULL;
+    long long values[2];
+    int ret;
+
+    ret = PAPI_library_init(PAPI_VER_CURRENT);
+    if (ret != PAPI_VER_CURRENT)
+        std::cout << "FAIL" << endl;
+
+    ret = PAPI_create_eventset(&EventSet);
+    if (ret != PAPI_OK)
+        cout << "ERROR: create eventset" << endl;
+
+    ret = PAPI_add_event(EventSet, PAPI_L1_DCM);
+    if (ret != PAPI_OK)
+        cout << "ERROR: PAPI_L1_DCM" << endl;
+
+    ret = PAPI_add_event(EventSet, PAPI_L2_DCM);
+    if (ret != PAPI_OK)
+        cout << "ERROR: PAPI_L2_DCM" << endl;
+
+    op = 1;
+    do
+    {
+        cout << endl
+             << "1. Multiplication" << endl;
+        cout << "2. Line Multiplication" << endl;
+        cout << "3. Block Multiplication" << endl;
+        cout << "4. Parallel Line Multiplication" << endl;
+        cout << "5. Parallel Line Multiplication (Different approach)" << endl;  // New option
+        cout << "Selection?: ";
+        cin >> op;
+        if (op == 0)
+            break;
+        printf("Dimensions: lins=cols ? ");
+        cin >> lin;
+        col = lin;
+
+        // Start counting
+        ret = PAPI_start(EventSet);
+        if (ret != PAPI_OK)
+            cout << "ERROR: Start PAPI" << endl;
+
+        switch (op)
+        {
+        case 1:
+            OnMult(lin, col);
+            break;
+        case 2:
+            OnMultLine(lin, col);
+            break;
+        case 3:
+            cout << "Block Size? ";
+            cin >> blockSize;
+            OnMultBlock(lin, col, blockSize);
+            break;
+        case 4:
+            OnMultLineParallel(lin, col);
+            break;
+        case 5:  // New case for Parallel Line Multiplication (Optimized)
+            OnMultLineParallel2(lin, col);
+            break;
+        }
+
+        ret = PAPI_stop(EventSet, values);
+        if (ret != PAPI_OK)
+            cout << "ERROR: Stop PAPI" << endl;
+        printf("L1 DCM: %lld \n", values[0]);
+        printf("L2 DCM: %lld \n", values[1]);
+
+        ret = PAPI_reset(EventSet);
+        if (ret != PAPI_OK)
+            std::cout << "FAIL reset" << endl;
+
+    } while (op != 0);
+
+    ret = PAPI_remove_event(EventSet, PAPI_L1_DCM);
+    if (ret != PAPI_OK)
+        std::cout << "FAIL remove event" << endl;
+
+    ret = PAPI_remove_event(EventSet, PAPI_L2_DCM);
+    if (ret != PAPI_OK)
+        std::cout << "FAIL remove event" << endl;
+
+    ret = PAPI_destroy_eventset(&EventSet);
+    if (ret != PAPI_OK)
+        std::cout << "FAIL destroy" << endl;
 }
