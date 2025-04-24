@@ -42,7 +42,6 @@ public class ChatServer {
             while ((line = in.readLine()) != null)
             {
                 System.out.println("Received: " + line);
-                out.println("Echo: " + line);
             }
 
         }
