@@ -3,7 +3,7 @@ import java.net.*;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 public class ChatServer {
@@ -12,8 +12,10 @@ public class ChatServer {
     private boolean running;
     private ServerSocket serverSocket;
 
-    private final List<Socket> clientSockets = new CopyOnWriteArrayList<>();
-    private final List<PrintWriter> clientWriters = new CopyOnWriteArrayList<>();
+    private final List<Socket> clientSockets = new ArrayList<>();
+    private final List<PrintWriter> clientWriters = new ArrayList<>();
+    private final ReentrantLock lock = new ReentrantLock();
+
 
     private final ClientAuthSystem clientAuth = new ClientAuthSystem();
 
@@ -28,7 +30,7 @@ public class ChatServer {
 
         System.out.println("Chat server starting on port " + port + "...");
 
-        try(ServerSocket serverSocket = new ServerSocket(port))
+        try (ServerSocket serverSocket = new ServerSocket(port))
         {
             this.serverSocket = serverSocket;
 
@@ -39,9 +41,19 @@ public class ChatServer {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("New Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-                clientSockets.add(clientSocket);
                 PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
-                clientWriters.add(writer);
+
+
+                lock.lock();
+                try
+                {
+                    clientSockets.add(clientSocket);
+                    clientWriters.add(writer);
+                }
+                finally
+                {
+                    lock.unlock();
+                }
 
                 Thread.ofVirtual().start(() -> {
                     try
@@ -63,7 +75,6 @@ public class ChatServer {
                         }
                     }
                 });
-
             }
         }
         catch (IOException e)
@@ -75,10 +86,13 @@ public class ChatServer {
         }
     }
 
-    public void stop_server(){
+
+    public void stop_server()
+    {
         running = false;
 
-        try {
+        try
+        {
             if (serverSocket != null && !serverSocket.isClosed())
             {
                 serverSocket.close();
@@ -89,53 +103,143 @@ public class ChatServer {
             System.out.println("Error closing server: " + e.getMessage());
         }
 
-        for (Socket socket : clientSockets)
+        lock.lock();
+        try
         {
-            try
-            {
-                if (socket != null && !socket.isClosed())
-                {
-                    socket.close();
+            for (Socket socket : clientSockets) {
+                try {
+                    if (socket != null && !socket.isClosed()) {
+                        socket.close();
+                    }
+                } catch (IOException e) {
+                    System.out.println("Error closing client socket: " + e.getMessage());
                 }
             }
-            catch (IOException e)
-            {
-                System.out.println("Error closing client socket: " + e.getMessage());
-            }
-        }
 
-        clientSockets.clear();
-        clientWriters.clear();
+            clientSockets.clear();
+            clientWriters.clear();
+        }
+        finally
+        {
+            lock.unlock();
+        }
     }
 
-    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException{
 
+    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException
+    {
         String username = null;
 
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())))
         {
             writer.println("AUTH_REQUEST");
 
-            writer.println("Enter username:");
-            username = in.readLine();
-
-            writer.println("Enter password:");
-            String password = in.readLine();
-
-            if (!clientAuth.verifyClient(username, password))
+            String mode = in.readLine();
+            if (mode == null)
             {
-                writer.println("AUTH_FAIL Invalid username or password");
                 clientSocket.close();
                 return;
             }
 
-            writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+            mode = mode.trim().toLowerCase();
 
+            if (mode.equals("register"))
+            {
+                writer.println("Enter username:");
+                username = in.readLine();
+
+                if (username == null || username.trim().isEmpty())
+                {
+                    writer.println("AUTH_FAIL Username cannot be empty");
+                    clientSocket.close();
+                    return;
+                }
+
+                if (clientAuth.usernameExists(username))
+                {
+                    writer.println("AUTH_FAIL Username already exists");
+                    clientSocket.close();
+                    return;
+                }
+
+                writer.println("Enter password:");
+                String password = in.readLine();
+
+                if (password == null || password.trim().isEmpty())
+                {
+                    writer.println("AUTH_FAIL Password cannot be empty");
+                    clientSocket.close();
+                    return;
+                }
+
+                if (clientAuth.registerClient(username, password))
+                {
+                    writer.println("AUTH_SUCCESS Registered successfully. Welcome, " + username + "!");
+                }
+                else
+                {
+                    writer.println("AUTH_FAIL Registration failed");
+                    clientSocket.close();
+                    return;
+                }
+            }
+
+            else if (mode.equals("login"))
+            {
+                int attempts = 0;
+                boolean authenticated = false;
+
+                while (attempts < 3) {
+                    writer.println("Enter username:");
+                    username = in.readLine();
+
+                    writer.println("Enter password:");
+                    String password = in.readLine();
+
+                    if (username == null || password == null)
+                    {
+                        writer.println("AUTH_FAIL Input cannot be null");
+                        attempts++;
+                        continue;
+                    }
+
+                    if (!clientAuth.usernameExists(username))
+                    {
+                        writer.println("AUTH_FAIL Username does not exist");
+                    }
+                    else if (!clientAuth.verifyClient(username, password))
+                    {
+                        writer.println("AUTH_FAIL Invalid password");
+                    }
+                    else
+                    {
+                        writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+                        authenticated = true;
+                        break;
+                    }
+
+                    attempts++;
+                }
+
+                if (!authenticated) {
+                    writer.println("AUTH_FAIL Too many failed login attempts.");
+                    clientSocket.close();
+                    return;
+                }
+            }
+
+            else
+            {
+                writer.println("AUTH_FAIL Invalid mode (must be 'login' or 'register')");
+                clientSocket.close();
+                return;
+            }
+
+            // Broadcast join message and start chat loop
             broadcast("[Server] " + username + " has joined the chat.", null);
 
             String line;
-            while ((line = in.readLine()) != null)
-            {
+            while ((line = in.readLine()) != null) {
                 System.out.println(username + ": " + line);
                 broadcast(username + ": " + line, writer);
             }
@@ -145,42 +249,54 @@ public class ChatServer {
         {
             System.out.println("Client disconnected: " + clientSocket.getInetAddress());
         }
-        catch (NoSuchAlgorithmException e)
-        {
-            writer.println("AUTH_FAIL Server error");
-            System.out.println("Hashing algorithm not available: " + e.getMessage());
-        }
-        finally
-        {
+        finally {
+            lock.lock();
+
             try
             {
                 clientSockets.remove(clientSocket);
                 clientWriters.remove(writer);
-                clientSocket.close();
+            }
+            finally
+            {
+                lock.unlock();
+            }
 
-                if (username != null)
-                {
-                    broadcast("[Server] " + username + " has left the chat.", null);
-                }
+            try
+            {
+                clientSocket.close();
             }
             catch (IOException e)
             {
-                System.out.println("Error cleaning up client connection: " + e.getMessage());
+                System.out.println("Error closing client socket: " + e.getMessage());
             }
-        }
-    }
 
-
-    private void broadcast(String message, PrintWriter sender)
-    {
-        for (PrintWriter writer : clientWriters)
-        {
-            if (writer != sender)
+            if (username != null)
             {
-                writer.println(message);
+                broadcast("[Server] " + username + " has left the chat.", null);
             }
         }
     }
+
+    private void broadcast(String message, PrintWriter sender) {
+
+        lock.lock();
+        try
+        {
+            for (PrintWriter writer : clientWriters)
+            {
+                if (writer != sender)
+                {
+                    writer.println(message);
+                }
+            }
+        }
+        finally
+        {
+            lock.unlock();
+        }
+    }
+
 
     public static void main(String[] args) {
         if (args.length < 1) {
@@ -194,8 +310,7 @@ public class ChatServer {
 
         // Pre-register a few test users
         try {
-            server.clientAuth.registerClient("alice", "password123");
-            server.clientAuth.registerClient("bob", "secure456");
+            server.clientAuth.registerClient("charlie", "test123");
             System.out.println("Test users registered: alice, bob");
         } catch (Exception e) {
             System.out.println("Error registering test users: " + e.getMessage());
@@ -204,5 +319,4 @@ public class ChatServer {
 
         server.start_server();
     }
-
 }

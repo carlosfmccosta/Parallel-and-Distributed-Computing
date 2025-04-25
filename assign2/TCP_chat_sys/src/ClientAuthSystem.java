@@ -1,3 +1,4 @@
+import java.io.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.security.MessageDigest;
@@ -8,6 +9,7 @@ import java.util.Base64;
 class ClientAuthSystem
 {
     private final Map<String, UserCredentials> registeredUsers = new ConcurrentHashMap<>();
+    private static final String FILE_PATH = "users.txt";
 
     // Class to store salt and hashed password together
     private static class UserCredentials {
@@ -28,18 +30,31 @@ class ClientAuthSystem
         }
     }
 
+    public ClientAuthSystem() {
+        loadUsersFromFile();
+    }
 
-    public void registerClient(String username, String plainTextPassword) throws NoSuchAlgorithmException
+    public boolean registerClient(String username, String plainTextPassword) throws NoSuchAlgorithmException
     {
-        // Generate a random salt
+        //already exists
+        if (registeredUsers.containsKey(username)) {
+            return false;
+        }
+
+        //generate a random salt
         SecureRandom random = new SecureRandom();
         byte[] saltBytes = new byte[16];
         random.nextBytes(saltBytes);
         String salt = Base64.getEncoder().encodeToString(saltBytes);
 
         String hashedPassword = hashPassword(plainTextPassword, salt);
+        UserCredentials clientCredentials = new UserCredentials(hashedPassword, salt);
 
-        registeredUsers.put(username, new UserCredentials(hashedPassword, salt));
+        registeredUsers.put(username, clientCredentials);
+
+        saveUserToFile(username, clientCredentials);
+
+        return true;
     }
 
 
@@ -64,4 +79,53 @@ class ClientAuthSystem
         byte[] hashedPassword = md.digest(password.getBytes());
         return Base64.getEncoder().encodeToString(hashedPassword);
     }
+
+    private void loadUsersFromFile()
+    {
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file)))
+        {
+            String line;
+            while ((line = reader.readLine()) != null)
+            {
+                String[] parts = line.split(":");
+
+                if (parts.length == 3)
+                {
+                    String username = parts[0];
+                    String hash = parts[1];
+                    String salt = parts[2];
+
+                    registeredUsers.put(username, new UserCredentials(hash, salt));
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            System.out.println("Error reading user file: " + e.getMessage());
+        }
+    }
+
+    private void saveUserToFile(String username, UserCredentials credentials) {
+        System.out.println("Trying to save: " + username);  // DEBUG
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, true))) {
+            writer.write(username + ":" + credentials.getPasswordHash() + ":" + credentials.getSalt());
+            writer.newLine();
+            System.out.println("Saved user: " + username);  // ✅ CONFIRM
+        } catch (IOException e) {
+            System.out.println("Error saving user to file: " + e.getMessage());
+        }
+    }
+
+    public boolean usernameExists(String username)
+    {
+        return registeredUsers.containsKey(username);
+    }
+
+
+
+
 }

@@ -32,8 +32,8 @@ public class ChatClient {
         this.port = port;
     }
 
-    public void start_client() {
-
+    public void start_client()
+    {
         int maxAttempts = 3;
         int attempt = 0;
         boolean connected = false;
@@ -42,66 +42,64 @@ public class ChatClient {
         while (attempt < maxAttempts && !connected)
         {
             attempt++;
-            try {
-                System.out.println("Attempting to connect to server (Attempt " + attempt + "/" + maxAttempts + ")...");
 
+            try
+            {
+                System.out.println("Attempting to connect to server (Attempt " + attempt + "/" + maxAttempts + ")...");
                 socket = new Socket(serverIP, port);
                 connected = true;
-
                 System.out.println("Connection established!");
 
-                try (
-                    //reads incoming messages from the server
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                Scanner scanner = new Scanner(System.in);
 
-                    //prints messages from the server
-                    PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-
-                    // reads user input
-                    Scanner scanner = new Scanner(System.in)) {
-
-                    Thread listener = new Thread(() -> {
-                        try {
-                            String serverMsg;
-                            while ((serverMsg = in.readLine()) != null) {
-                                System.out.println("\n" + serverMsg);
-                                System.out.print("You: ");
-                            }
-                        } catch (IOException e) {
-                            System.out.println("Connection closed.");
-                        }
-                    });
-
-                    listener.start();
-
-                    System.out.print("You: ");
-
-                    while (scanner.hasNextLine())
-                    {
-                        String input = scanner.nextLine();
-                        out.println(input);
-                    }
+                if (!handleAuthentication(in, out, scanner))
+                {
+                    System.out.println("Authentication failed. Disconnecting.");
+                    return;
                 }
 
-            }
-            catch (SocketTimeoutException e)
-            {
-                System.out.println("Connection attempt " + attempt + " timed out.");
+                Thread listener = new Thread(() -> {
+                    try
+                    {
+                        String serverMsg;
+                        while ((serverMsg = in.readLine()) != null) {
+                            System.out.println("\n" + serverMsg);
+                            System.out.print("You: ");
+                        }
+                    }
+                    catch (IOException e)
+                    {
+                        System.out.println("Connection closed.");
+                    }
+                });
+
+                listener.start();
+
+                System.out.print("You: ");
+                while (scanner.hasNextLine())
+                {
+                    String input = scanner.nextLine();
+                    out.println(input);
+                }
+
             }
             catch (IOException e)
             {
                 System.out.println("Connection attempt " + attempt + " failed: " + e.getMessage());
             }
-
-            finally {
-                if (!connected && socket != null)
+            finally
+            {
+                if (!connected)
                 {
                     try
                     {
                         socket.close();
                     }
-                    catch (IOException e) {
-                        // Ignore close exception
+                    catch (IOException e)
+                    {
+                        //ignore
                     }
                 }
             }
@@ -110,7 +108,6 @@ public class ChatClient {
             {
                 try
                 {
-                    // wait 2 secs before tryig again
                     Thread.sleep(2000);
                 }
                 catch (InterruptedException e)
@@ -127,6 +124,67 @@ public class ChatClient {
         }
     }
 
+
+    private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
+    {
+        System.out.println("Do you want to [login] or [register]?");
+        System.out.print("Choice: ");
+        String mode = scanner.nextLine().trim().toLowerCase();
+
+        while (!mode.equals("login") && !mode.equals("register"))
+        {
+            System.out.println("Invalid choice. Please enter 'login' or 'register'.");
+            System.out.print("Choice: ");
+
+            mode = scanner.nextLine().trim().toLowerCase();
+        }
+
+        out.println(mode);
+
+        while (true)
+        {
+            String serverPrompt = in.readLine();
+
+            if (serverPrompt == null)
+            {
+                System.out.println("Server closed connection.");
+                return false;
+            }
+
+            if (serverPrompt.startsWith("Enter username:"))
+            {
+                System.out.print("Username: ");
+                out.println(scanner.nextLine());
+            }
+            else if (serverPrompt.startsWith("Enter password:"))
+            {
+                System.out.print("Password: ");
+                out.println(scanner.nextLine());
+            }
+            else if (serverPrompt.startsWith("AUTH_SUCCESS"))
+            {
+                System.out.println(serverPrompt);
+                return true;
+            }
+            else if (serverPrompt.startsWith("AUTH_FAIL"))
+            {
+                System.out.println(serverPrompt);
+
+                if (serverPrompt.contains("Too many failed"))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                System.out.println("Server: " + serverPrompt);
+            }
+        }
+    }
+
+
+
+
     public static void main(String[] args) {
 
         String ip = "localhost";
@@ -135,8 +193,4 @@ public class ChatClient {
         ChatClient client = new ChatClient(ip, port);
         client.start_client();
     }
-
-
-
-
 }
