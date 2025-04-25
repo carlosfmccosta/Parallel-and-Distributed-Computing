@@ -64,7 +64,7 @@ public class ChatClient {
                         try {
                             String serverMsg;
                             while ((serverMsg = in.readLine()) != null) {
-                                System.out.println("\n[Server]: " + serverMsg);
+                                System.out.println("\n" + serverMsg);
                                 System.out.print("You: ");
                             }
                         } catch (IOException e) {
