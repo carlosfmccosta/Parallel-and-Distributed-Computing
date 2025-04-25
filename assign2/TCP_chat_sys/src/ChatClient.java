@@ -45,9 +45,7 @@ public class ChatClient {
             try {
                 System.out.println("Attempting to connect to server (Attempt " + attempt + "/" + maxAttempts + ")...");
 
-                socket = new Socket();
-
-                socket.connect(new InetSocketAddress(serverIP, port), 3000);
+                socket = new Socket(serverIP, port);
                 connected = true;
 
                 System.out.println("Connection established!");
