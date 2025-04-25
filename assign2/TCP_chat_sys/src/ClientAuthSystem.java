@@ -124,8 +124,4 @@ class ClientAuthSystem
     {
         return registeredUsers.containsKey(username);
     }
-
-
-
-
 }

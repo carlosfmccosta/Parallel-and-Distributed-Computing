@@ -1,6 +1,2 @@
 alice:6aYaYowddIFth9omvaoN4ZWe2Nz41ALUQ0xNKu0kD0U=:cfdP3Oib+rnb8abIIAwQ8w==
 bob:uGVc3UxXNTPB8Z/qf2iHt/dkU/JOXa3B21Hn7TFwKf8=:KZJ9efg4Tde+qx/6+B2mJQ==
-charlie:59fh+X9CUrUnjp/UJt1BUWwHx69zQKawpsNJXtPrRs8=:rdcRby4B8bhaW5NK7b5wwA==
-pedro:J5wDhLhWbZU6NLm0VpoPuzLGFOElh4k+BjYnE+TQLq0=:+sK2I6eAkq72pNwxwIRTLw==
-mijoaopacheco:aq091VKTkMGZ65Z0hrXXVG33SRIf1OcsinUeURPBHxY=:9WXHhtTDR+asJP4IRbrZLg==
-luci:h02brinYAv1IqPUJyDAnCV9ZT0MjDhNQNKMEG3YuXNA=:566Y96hkCNh5xnNpsp2+qw==
