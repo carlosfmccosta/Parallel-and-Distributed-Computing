@@ -147,7 +147,7 @@ public class ChatClient {
 
             if (serverPrompt == null)
             {
-                System.out.println("Server closed connection.");
+                System.out.println("\nServer closed connection.");
                 return false;
             }
 
