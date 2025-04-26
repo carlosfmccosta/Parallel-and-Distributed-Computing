@@ -1,0 +1,20 @@
+alice: hi thre people
+bob: ola
+bob: a
+bob: oa
+bob: ols
+bob: mspo dri
+bob: vsvs
+alice: @bot ola
+alice: @bot ola como estas
+alice: @bot ola como estas
+alice: @bot como estas
+alice: @bot como tu estas
+bob: @bot ola consegues me ouvir
+alice: @bot como estas
+alice: @bot ola ccommo estas
+alice: @bot como estas hoje
+alice: @bot ola como e que estas hj
+alice: @bot hi there
+alice: @bot ola como estas
+alice: como estas hj @bot?

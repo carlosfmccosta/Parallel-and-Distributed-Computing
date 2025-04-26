@@ -39,12 +39,15 @@ public class ServerRoom {
             System.out.println("Error logging message in room " + name + ": " + e.getMessage());
         }
 
+        boolean isBotMessage = message.startsWith("[Bot]:");
+
         for (PrintWriter writer : writers) {
-            if (writer != sender) {
+            if (isBotMessage || writer != sender) {
                 writer.println(message);
             }
         }
     }
+
 
     // Method to get the last 5 messages from the log file, excluding messages with "You"
     public synchronized List<String> getLastFiveMessagesWithoutYou() {

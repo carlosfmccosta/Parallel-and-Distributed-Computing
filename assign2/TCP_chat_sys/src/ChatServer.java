@@ -18,6 +18,9 @@ public class ChatServer {
 
     private final ClientAuthSystem clientAuth = new ClientAuthSystem();
 
+    private PrintWriter botWriter = null;
+
+
     public ChatServer(int port) {
         this.port = port;
     }
@@ -138,9 +141,17 @@ public class ChatServer {
                 return;
             }
 
+            String botRoom = null;
+            if (username.startsWith("AI_Bot#"))
+            {
+                botRoom = username.split("#")[1];
+                username = "AI_Bot";
+                botWriter = writer;
+            }
+
             broadcast("[Server] " + username + " has joined the chat.", null);
 
-            chatLoop(username, in, writer, clientSocket);
+            chatLoop(username, in, writer, clientSocket, botRoom);
 
         }
         catch (IOException e)
@@ -157,6 +168,28 @@ public class ChatServer {
     {
         String mode = in.readLine();
         if (mode == null) return null;
+
+        if ("AI_BOT".equals(mode))
+        {
+            String password = in.readLine();
+            if ("bot_password".equals(password))
+            {
+                writer.println("Enter room to join:");
+
+                String botRoom = in.readLine();
+
+                if (botRoom == null || botRoom.trim().isEmpty()) {
+                    writer.println("AUTH_FAIL Room name cannot be empty");
+                    return null;
+                }
+
+                writer.println("AUTH_SUCCESS");
+                return "AI_Bot#" + botRoom.trim(); // notice the trick
+            }
+            writer.println("AUTH_FAIL Invalid bot credentials");
+            return null;
+        }
+
 
         mode = mode.trim().toLowerCase();
 
@@ -244,8 +277,25 @@ public class ChatServer {
         return null;
     }
 
-    private void chatLoop(String username, BufferedReader in, PrintWriter writer, Socket clientSocket) throws IOException
+    private void chatLoop(String username, BufferedReader in, PrintWriter writer, Socket clientSocket, String botRoom) throws IOException
     {
+        if ("AI_Bot".equals(username))
+        {
+            String line;
+            while ((line = in.readLine()) != null)
+            {
+                if (line.startsWith("[Bot]:"))
+                {
+                    if (botRoom != null)
+                    {
+                        ServerRoom room = getOrCreateRoom(botRoom);
+                        room.broadcast(line, writer);
+                    }
+                }
+            }
+            return;
+        }
+
         String currentRoomName = "general";
         ServerRoom currentRoom = getOrCreateRoom(currentRoomName);
         addClientToRoom(currentRoomName, clientSocket, writer);
@@ -278,6 +328,18 @@ public class ChatServer {
                 }
             }
 
+            else if (line.contains("@bot"))
+            {
+                currentRoom.broadcast(username + ": " + line, writer);
+
+                PrintWriter botWriter = findBotWriter();
+
+                if (botWriter != null)
+                {
+                    botWriter.println(line);
+                }
+            }
+
             else if (line.startsWith("/leave"))
             {
                 removeClientFromRoom(currentRoomName, clientSocket, writer);
@@ -304,6 +366,11 @@ public class ChatServer {
                 currentRoom.broadcast(username + ": " + line, writer);
             }
         }
+    }
+
+    private PrintWriter findBotWriter()
+    {
+        return botWriter;
     }
 
     private void cleanupConnection(Socket clientSocket, PrintWriter writer, String username)
@@ -360,13 +427,38 @@ public class ChatServer {
         lock.lock();
         try
         {
-            return serverRooms.computeIfAbsent(roomName, ServerRoom::new);
+            boolean roomExists = serverRooms.containsKey(roomName);
+
+            ServerRoom room = serverRooms.computeIfAbsent(roomName, ServerRoom::new);
+
+            if (!roomExists && !"general".equals(roomName)) // Don't spawn bot for default "general" room
+            {
+                System.out.println("New room created: " + roomName + ", spawning AI bot...");
+
+                new Thread(() -> {
+                    try {
+                        AIClient bot = new AIClient(
+                                "localhost",
+                                8080,
+                                "http://localhost:11434",
+                                "llama3",
+                                roomName
+                        );
+                        bot.start();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }).start();
+            }
+
+            return room;
         }
         finally
         {
             lock.unlock();
         }
     }
+
 
     private void addClientToRoom(String roomName, Socket socket, PrintWriter writer)
     {
@@ -400,6 +492,12 @@ public class ChatServer {
                 if (room.clients.isEmpty())
                 {
                     serverRooms.remove(roomName);
+
+                    if (!"general".equals(roomName)) // Don't kill the default general bot
+                    {
+                        System.out.println("Room " + roomName + " is empty, shutting down its AI bot...");
+                        disconnectBot(roomName);
+                    }
                 }
             }
         }
@@ -408,6 +506,31 @@ public class ChatServer {
             lock.unlock();
         }
     }
+
+    private void disconnectBot(String roomName)
+    {
+        try (Socket socket = new Socket("localhost", 8080);
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream())))
+        {
+            // Authenticate as AI_BOT
+            out.println("AI_BOT");
+            out.println("bot_password");
+            out.println(roomName);
+
+            String response = in.readLine();
+            if ("AUTH_SUCCESS".equals(response))
+            {
+                // Tell the bot to shut itself down
+                out.println("/shutdown");
+            }
+        }
+        catch (IOException e)
+        {
+            System.out.println("Failed to disconnect bot for room " + roomName + ": " + e.getMessage());
+        }
+    }
+
 
     public static void main(String[] args) {
         if (args.length < 1) {
