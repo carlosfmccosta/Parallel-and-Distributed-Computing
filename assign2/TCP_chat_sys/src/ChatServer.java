@@ -320,7 +320,7 @@ public class ChatServer {
 
                     writer.println("You have joined room: " + currentRoomName);
 
-                    List<String> lastMessages = currentRoom.getLastFiveMessagesWithoutYou();
+                    List<String> lastMessages = currentRoom.getLastFiveMessages();
                     for (String msg : lastMessages)
                     {
                         writer.println(msg);
@@ -338,6 +338,8 @@ public class ChatServer {
                 {
                     botWriter.println(line);
                 }
+
+                System.out.println("Sending to bot: " + line);
             }
 
             else if (line.startsWith("/leave"))

@@ -24,75 +24,47 @@ public class AIClient
         this.currentRoom = currentRoom;
     }
 
-    public void start()
-    {
-        while (true)
-        {
-            try
-            {
+    public void start() {
+        while (true) {
+            try {
+                System.out.println("Attempting to connect to server...");
+
                 Socket socket = new Socket(serverIp, port);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
-                out.println("AI_Bot");
+                out.println("login");
+                out.println("AI_Bot#" + currentRoom);
                 out.println("bot_password");
 
                 System.out.println("Connected to chat server. Waiting for messages...");
 
                 out.println("/join " + currentRoom);
+                System.out.println("Joined room: " + currentRoom);
 
                 new Thread(() -> {
-                    try
-                    {
+                    try {
                         String message;
-                        while ((message = in.readLine()) != null)
-                        {
-                            if (message.startsWith("[Server] You have joined room:"))
-                            {
-                                currentRoom = message.replace("[Server] You have joined room:", "").trim();
-                                continue;
-                            }
+                        while ((message = in.readLine()) != null) {
+                            System.out.println("Received message: " + message);
 
-                            if (message.startsWith("[Room:")) {
-                                // Extract room name
-                                int roomEndIndex = message.indexOf("]");
-                                if (roomEndIndex > 0) {
-                                    currentRoom = message.substring(6, roomEndIndex).trim();
-                                    String actualMessage = message.substring(roomEndIndex + 1).trim();
-
-                                    if (actualMessage.contains("@bot")) {
-                                        String response = generateAIResponse(actualMessage);
-                                        if (response != null) {
-                                            out.println("[Bot]: " + response);
-                                        }
-                                    }
-                                }
-                            } else if (message.contains("@bot")) {
+                            // If someone mentions @bot, trigger an AI response
+                            if (message.contains("@bot")) {
                                 String response = generateAIResponse(message);
-                                if (response != null) {
-                                    out.println("[Bot]: " + response);
-                                }
+                                sendBotResponse(response, out);
                             }
                         }
-                    }
-                    catch (IOException e)
-                    {
+                    } catch (IOException e) {
                         System.err.println("Error reading from server: " + e.getMessage());
                     }
                 }).start();
 
                 break;
-
-            }
-            catch (IOException e)
-            {
+            } catch (IOException e) {
                 System.err.println("Connection failed, retrying in 5 seconds...");
-                try
-                {
+                try {
                     TimeUnit.SECONDS.sleep(5);
-                }
-                catch (InterruptedException ie)
-                {
+                } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     return;
                 }
@@ -100,18 +72,23 @@ public class AIClient
         }
     }
 
-    private String generateAIResponse(String prompt)
-    {
+    private void sendBotResponse(String response, PrintWriter out) {
+        System.out.println("[Bot] Sending response to server: " + response);
+        out.println("[Bot]: " + response); // Important to prefix with [Bot]: to make it clear
+    }
+
+    private String generateAIResponse(String prompt) {
         long now = System.currentTimeMillis();
-        if (now - lastResponseTime < RESPONSE_COOLDOWN_MS)
-        {
+        if (now - lastResponseTime < RESPONSE_COOLDOWN_MS) {
+            System.out.println("[Bot] Cooldown active. Sending wait message.");
             return "Please wait a moment before asking again...";
         }
 
         lastResponseTime = now;
 
-        try
-        {
+        try {
+            System.out.println("[Bot] Generating response for prompt: " + prompt);
+
             List<String> context = getRoomContext();
             String contextPrompt = buildContextPrompt(prompt, context);
 
@@ -121,6 +98,8 @@ public class AIClient
                     escapeJson(contextPrompt)
             );
 
+            System.out.println("[Bot] JSON request to Ollama:\n" + jsonRequest);
+
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(ollamaUrl + "/api/generate"))
                     .header("Content-Type", "application/json")
@@ -129,97 +108,97 @@ public class AIClient
 
             HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() != 200)
-            {
-                System.err.println("Ollama API error: " + response.body());
+            if (response.statusCode() != 200) {
+                System.err.println("[Bot] Ollama API error: " + response.body());
                 return "Sorry, I'm having technical difficulties. (API Error)";
             }
 
-
             String responseBody = response.body();
+            System.out.println("[Bot] Raw API response: " + responseBody);
 
             int start = responseBody.indexOf("\"response\":\"") + 11;
             int end = responseBody.indexOf("\"", start + 1);
 
-            return responseBody.substring(start + 1, end);
+            if (start < 11 || end <= start) {
+                System.err.println("[Bot] Failed to parse AI response properly.");
+                return "I'm not sure how to respond...";
+            }
 
-        }
-        catch (Exception e)
-        {
-            System.err.println("AI Error: " + e.getMessage());
+            String aiResponse = responseBody.substring(start + 1, end);
+            System.out.println("[Bot] Generated AI Response: " + aiResponse);
 
+            return aiResponse;
+
+        } catch (Exception e) {
+            System.err.println("[Bot] AI Error: " + e.getMessage());
             return "I'm having trouble thinking right now...";
         }
     }
 
-    private List<String> getRoomContext()
-    {
+    private List<String> getRoomContext() {
         List<String> context = new ArrayList<>();
 
-        try
-        {
+        try {
             File logFile = new File(currentRoom + "_log.txt");
 
-            if (!logFile.exists()) return context;
+            if (!logFile.exists()) {
+                System.out.println("[Bot] No previous room log found.");
+                return context;
+            }
 
-            //read last messages for bot context
-            try (BufferedReader reader = new BufferedReader(new FileReader(logFile)))
-            {
+            System.out.println("[Bot] Reading recent messages from: " + logFile.getName());
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
                 Deque<String> lastMessages = new ArrayDeque<>();
                 String line;
-                while ((line = reader.readLine()) != null)
-                {
-                    if (!line.contains("[Bot]") && !line.trim().isEmpty())
-                    {
+                while ((line = reader.readLine()) != null) {
+                    if (!line.contains("[Bot]") && !line.trim().isEmpty()) {
                         lastMessages.addLast(line);
-
-                        if (lastMessages.size() > MAX_CONTEXT_LINES)
-                        {
+                        if (lastMessages.size() > MAX_CONTEXT_LINES) {
                             lastMessages.removeFirst();
                         }
                     }
                 }
-
                 context.addAll(lastMessages);
+                System.out.println("[Bot] Room context for prompt:\n" + context);
             }
-        }
-        catch (IOException e)
-        {
-            System.err.println("Couldn't read room context: " + e.getMessage());
+        } catch (IOException e) {
+            System.err.println("[Bot] Couldn't read room context: " + e.getMessage());
         }
 
         return context;
     }
 
-    private String buildContextPrompt(String prompt, List<String> context)
-    {
+    private String buildContextPrompt(String prompt, List<String> context) {
         StringBuilder sb = new StringBuilder();
 
-        if (!context.isEmpty())
-        {
+        if (!context.isEmpty()) {
             sb.append("Recent conversation context:\n");
-
-            for (String msg : context)
-            {
+            for (String msg : context) {
                 sb.append(msg).append("\n");
             }
-
             sb.append("\n");
         }
 
         sb.append("Please respond to this: ").append(prompt.replace("@bot", "").trim());
 
-        return sb.toString();
+        String finalPrompt = sb.toString();
+        System.out.println("[Bot] Final prompt with context:\n" + finalPrompt);
+
+        return finalPrompt;
     }
 
-    private String escapeJson(String input)
-    {
-        return input.replace("\\", "\\\\")
+    private String escapeJson(String input) {
+        String escapedInput = input.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+
+        System.out.println("[Bot] Escaped JSON input: " + escapedInput);
+        return escapedInput;
     }
+
 
     public static void main(String[] args) {
         new AIClient("localhost", 8080, "http://localhost:11434", "llama3","general").start();
