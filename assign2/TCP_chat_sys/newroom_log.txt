@@ -1,4 +1,0 @@
-alice: @bot ola como estas
-alice: ola @bot diz me a capital de italia
-alice: ola @bot qual e a capital de espanha
-alice: ola @bot qual a capital da chna

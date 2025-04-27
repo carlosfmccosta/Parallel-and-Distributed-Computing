@@ -125,60 +125,55 @@ public class ChatClient {
     }
 
 
-    private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
-    {
-        System.out.println("Do you want to [login] or [register]?");
-        System.out.print("Choice: ");
-        String mode = scanner.nextLine().trim().toLowerCase();
-
-        while (!mode.equals("login") && !mode.equals("register"))
-        {
-            System.out.println("Invalid choice. Please enter 'login' or 'register'.");
+    private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException {
+        while (true) {
+            // Sempre começa perguntando login ou register
+            System.out.println("Do you want to [login] or [register]?");
             System.out.print("Choice: ");
+            String mode = scanner.nextLine().trim().toLowerCase();
 
-            mode = scanner.nextLine().trim().toLowerCase();
-        }
-
-        out.println(mode);
-
-        while (true)
-        {
-            String serverPrompt = in.readLine();
-
-            if (serverPrompt == null)
-            {
-                System.out.println("\nServer closed connection.");
-                return false;
+            while (!mode.equals("login") && !mode.equals("register")) {
+                System.out.println("Invalid choice. Please enter 'login' or 'register'.");
+                System.out.print("Choice: ");
+                mode = scanner.nextLine().trim().toLowerCase();
             }
 
-            if (serverPrompt.startsWith("Enter username:"))
-            {
-                System.out.print("Username: ");
-                out.println(scanner.nextLine());
-            }
-            else if (serverPrompt.startsWith("Enter password:"))
-            {
-                System.out.print("Password: ");
-                out.println(scanner.nextLine());
-            }
-            else if (serverPrompt.startsWith("AUTH_SUCCESS"))
-            {
-                System.out.println(serverPrompt);
-                return true;
-            }
-            else if (serverPrompt.startsWith("AUTH_FAIL"))
-            {
-                System.out.println(serverPrompt);
+            out.println(mode);
 
-                if (serverPrompt.contains("Too many failed"))
-                {
+            while (true) {
+                String serverPrompt = in.readLine();
+
+                if (serverPrompt == null) {
+                    System.out.println("\nServer closed connection.");
                     return false;
                 }
+
+                if (serverPrompt.startsWith("Enter username:")) {
+                    System.out.print("Username: ");
+                    out.println(scanner.nextLine());
+                }
+                else if (serverPrompt.startsWith("Enter password:")) {
+                    System.out.print("Password: ");
+                    out.println(scanner.nextLine());
+                }
+                else if (serverPrompt.startsWith("AUTH_SUCCESS")) {
+                    System.out.println(serverPrompt);
+                    return true;
+                }
+                else if (serverPrompt.startsWith("AUTH_FAIL")) {
+                    System.out.println(serverPrompt);
+
+                    if (serverPrompt.contains("Too many failed") || serverPrompt.contains("Login failed")) {
+                        // Login falhou -> volta para a escolha login/register
+                        break;
+                    }
+                    // Se for erro menor (ex: senha errada mas pode tentar de novo), continua no while interno
+                }
+                else {
+                    System.out.println("Server: " + serverPrompt);
+                }
             }
-            else
-            {
-                System.out.println("Server: " + serverPrompt);
-            }
+            // Quando dá break (login falhou), volta aqui e pergunta novamente login ou register
         }
     }
 

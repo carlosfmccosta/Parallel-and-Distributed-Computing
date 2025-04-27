@@ -127,23 +127,21 @@ public class ChatServer {
         }
     }
 
-    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException
-    {
+    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException {
         String username = null;
 
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())))
-        {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))) {
             writer.println("AUTH_REQUEST");
 
-            username = performAuthentication(in, writer);
-            if (username == null)
-            {
-                return;
+            while (username == null) {
+                username = performAuthentication(in, writer);
+                if (username == null) {
+                    writer.println("AUTH_REQUEST"); // ask again after fail
+                }
             }
 
             String botRoom = null;
-            if (username.startsWith("AI_Bot#"))
-            {
+            if (username.startsWith("AI_Bot#")) {
                 botRoom = username.split("#")[1];
                 username = "AI_Bot";
                 botWriters.put(botRoom, writer);
@@ -153,13 +151,9 @@ public class ChatServer {
 
             chatLoop(username, in, writer, clientSocket, botRoom);
 
-        }
-        catch (IOException e)
-        {
+        } catch (IOException e) {
             System.out.println("Client disconnected: " + clientSocket.getInetAddress());
-        }
-        finally
-        {
+        } finally {
             cleanupConnection(clientSocket, writer, username);
         }
     }
@@ -387,6 +381,7 @@ public class ChatServer {
         try
         {
             clientSockets.remove(clientSocket);
+            clientWriters.remove(writer);
             clientWriters.remove(writer);
         }
         finally

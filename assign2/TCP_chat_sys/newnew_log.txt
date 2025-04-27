@@ -1,0 +1,6 @@
+alice: hi @bot where is lisbon
+alice: hi @bot where is rom
+[Bot]: You're picking up the thread!\n\nROM stands for Rome, Italy.
+alice: @bot where is spain
+alice: hi @bot how are u
+[Bot]: I'm doing well, thanks for asking! It's great to chat with you. By the way, I noticed you asked about some places earlier - Lisbon is a city in Portugal, Rome (or Rom) is a city in Italy, and Spain is a country in southwestern Europe. If you have any more questions or need help with anything else, feel free to ask!

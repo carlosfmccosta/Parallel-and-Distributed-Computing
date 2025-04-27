@@ -1,5 +1,8 @@
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,19 +66,25 @@ public class ServerRoom {
     // Method to get the last 5 messages from the log file, excluding messages with "You"
     public synchronized List<String> getLastFiveMessages() {
         List<String> lastMessages = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(name + "_log.txt"))) {
-            String line;
-            // Read the file into a list of lines
+
+        Path logFilePath = Paths.get(name + "_log.txt");
+
+        if (!Files.exists(logFilePath)) {
+            System.out.println("Log file does not exist yet: " + logFilePath);
+            return lastMessages; // return empty list
+        }
+
+        try (BufferedReader reader = Files.newBufferedReader(logFilePath)) {
             List<String> lines = new ArrayList<>();
+            String line;
+
             while ((line = reader.readLine()) != null) {
                 lines.add(line);
             }
 
-            // Get the last 5 lines
             int start = Math.max(0, lines.size() - MAX_MESSAGE_COUNT);
             for (int i = start; i < lines.size(); i++) {
                 String message = lines.get(i);
-                // Filter out messages that contain "You"
                 if (!message.startsWith("You:")) {
                     lastMessages.add(message);
                 }
