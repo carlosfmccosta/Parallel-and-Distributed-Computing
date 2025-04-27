@@ -18,7 +18,7 @@ public class ChatServer {
 
     private final ClientAuthSystem clientAuth = new ClientAuthSystem();
 
-    private PrintWriter botWriter = null;
+    private final Map<String, PrintWriter> botWriters = new HashMap<>();
 
 
     public ChatServer(int port) {
@@ -146,7 +146,7 @@ public class ChatServer {
             {
                 botRoom = username.split("#")[1];
                 username = "AI_Bot";
-                botWriter = writer;
+                botWriters.put(botRoom, writer);
             }
 
             broadcast("[Server] " + username + " has joined the chat.", null);
@@ -332,7 +332,7 @@ public class ChatServer {
             {
                 currentRoom.broadcast(username + ": " + line, writer);
 
-                PrintWriter botWriter = findBotWriter();
+                PrintWriter botWriter = findBotWriter(currentRoomName);
 
                 if (botWriter != null)
                 {
@@ -370,10 +370,15 @@ public class ChatServer {
         }
     }
 
-    private PrintWriter findBotWriter()
-    {
-        return botWriter;
+    private PrintWriter findBotWriter(String roomName) {
+        lock.lock();
+        try {
+            return botWriters.get(roomName);
+        } finally {
+            lock.unlock();
+        }
     }
+
 
     private void cleanupConnection(Socket clientSocket, PrintWriter writer, String username)
     {
@@ -494,6 +499,7 @@ public class ChatServer {
                 if (room.clients.isEmpty())
                 {
                     serverRooms.remove(roomName);
+                    botWriters.remove(roomName);
 
                     if (!"general".equals(roomName)) // Don't kill the default general bot
                     {

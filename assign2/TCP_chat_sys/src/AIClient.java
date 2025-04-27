@@ -37,6 +37,16 @@ public class AIClient
                 out.println("AI_Bot#" + currentRoom);
                 out.println("bot_password");
 
+                String re = in.readLine(); // Step 4: Wait for server to answer
+
+                if ("AUTH_SUCCESS".equals(re)) {
+                    System.out.println("Bot authenticated successfully!");
+                } else {
+                    out.println("register");
+                    out.println("AI_Bot#" + currentRoom);
+                    out.println("bot_password");
+                }
+
                 System.out.println("Connected to chat server. Waiting for messages...");
 
                 out.println("/join " + currentRoom);
@@ -73,7 +83,7 @@ public class AIClient
     }
 
     private void sendBotResponse(String response, PrintWriter out) {
-        System.out.println("[Bot] Sending response to server: " + response);
+        System.out.println("[Bot] Sending response to server and room" + currentRoom + " : " + response);
         out.println("[Bot]: " + response); // Important to prefix with [Bot]: to make it clear
     }
 
