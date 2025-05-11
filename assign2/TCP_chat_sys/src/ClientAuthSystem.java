@@ -11,33 +11,38 @@ class ClientAuthSystem
     private final Map<String, UserCredentials> registeredUsers = new ConcurrentHashMap<>();
     private static final String FILE_PATH = "users.txt";
 
-    // Class to store salt and hashed password together
-    private static class UserCredentials {
+    //class to store salt and hashed password together
+    private static class UserCredentials
+    {
         private final String passwordHash;
         private final String salt;
 
-        public UserCredentials(String passwordHash, String salt) {
+        public UserCredentials(String passwordHash, String salt)
+        {
             this.passwordHash = passwordHash;
             this.salt = salt;
         }
 
-        public String getPasswordHash() {
+        public String getPasswordHash()
+        {
             return passwordHash;
         }
 
-        public String getSalt() {
+        public String getSalt()
+        {
             return salt;
         }
     }
 
-    public ClientAuthSystem() {
+    public ClientAuthSystem()
+    {
         loadUsersFromFile();
     }
 
     public boolean registerClient(String username, String plainTextPassword) throws NoSuchAlgorithmException
     {
-        //already exists
-        if (registeredUsers.containsKey(username)) {
+        if (registeredUsers.containsKey(username))
+        {
             return false;
         }
 
@@ -108,14 +113,18 @@ class ClientAuthSystem
         }
     }
 
-    private void saveUserToFile(String username, UserCredentials credentials) {
-        System.out.println("Trying to save: " + username);  // DEBUG
+    private void saveUserToFile(String username, UserCredentials credentials)
+    {
+        System.out.println("Trying to save: " + username);
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, true))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, true)))
+        {
             writer.write(username + ":" + credentials.getPasswordHash() + ":" + credentials.getSalt());
             writer.newLine();
-            System.out.println("Saved user: " + username);  // ✅ CONFIRM
-        } catch (IOException e) {
+            System.out.println("Saved user: " + username);
+        }
+        catch (IOException e)
+        {
             System.out.println("Error saving user to file: " + e.getMessage());
         }
     }

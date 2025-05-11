@@ -36,8 +36,8 @@ public class AIClient
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
-                // Authenticate properly
-                if (!authenticateBot(in, out)) {
+                if (!authenticateBot(in, out))
+                {
                     System.err.println("Authentication failed. Retrying in 5 seconds...");
                     socket.close();
                     TimeUnit.SECONDS.sleep(5);
@@ -49,30 +49,37 @@ public class AIClient
                 out.println("/join " + currentRoom);
                 System.out.println("Joined room: " + currentRoom);
 
-                new Thread(() -> {
+                Thread.startVirtualThread(() -> {
                     try {
                         String message;
-                        while ((message = in.readLine()) != null) {
+                        while ((message = in.readLine()) != null)
+                        {
                             System.out.println("Received message: " + message);
 
-                            if (message.contains("@bot")) {
+                            if (message.contains("@bot"))
+                            {
                                 String response = generateAIResponse(message);
                                 sendBotResponse(response, out);
                             }
                         }
-                    } catch (IOException e) {
+                    }
+                    catch (IOException e)
+                    {
                         System.err.println("Error reading from server: " + e.getMessage());
                     }
-                }).start();
+                });
 
                 break;
             }
             catch (IOException | InterruptedException e)
             {
                 System.err.println("Connection failed, retrying in 5 seconds...");
-                try {
+                try
+                {
                     TimeUnit.SECONDS.sleep(5);
-                } catch (InterruptedException ie) {
+                }
+                catch (InterruptedException ie)
+                {
                     Thread.currentThread().interrupt();
                     return;
                 }
@@ -80,8 +87,6 @@ public class AIClient
         }
     }
 
-
-    // Helper function to wait for AUTH_REQUEST
     private boolean waitForAuthRequest(BufferedReader in) throws IOException
     {
         int maxTries = 5;
@@ -94,6 +99,7 @@ public class AIClient
 
             System.out.println("Waiting for AUTH_REQUEST, got instead: " + serverMessage);
         }
+
         return false;
     }
 
@@ -147,7 +153,7 @@ public class AIClient
     private void sendBotResponse(String response, PrintWriter out)
     {
         System.out.println("[Bot] Sending response to server and room" + currentRoom + " : " + response);
-        out.println("[Bot]: " + response); // Important to prefix with [Bot]: to make it clear
+        out.println("[Bot]: " + response);
     }
 
     private String generateAIResponse(String prompt)

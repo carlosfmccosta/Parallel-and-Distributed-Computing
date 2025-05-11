@@ -487,7 +487,7 @@ public class ChatServer {
             {
                 System.out.println("New room created: " + roomName + ", spawning AI bot...");
 
-                new Thread(() -> {
+                Thread.ofVirtual().start(() -> {
                     try {
                         AIClient bot = new AIClient(
                                 "localhost",
@@ -500,7 +500,8 @@ public class ChatServer {
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-                }).start();
+                });
+
             }
 
             return room;
@@ -512,14 +513,20 @@ public class ChatServer {
     }
 
 
-    private synchronized void addClientToRoom(String roomName, Socket socket, PrintWriter writer) {
-        try {
+    private synchronized void addClientToRoom(String roomName, Socket socket, PrintWriter writer)
+    {
+        try
+        {
             ServerRoom room = serverRooms.get(roomName);
-            if (room != null) {
+
+            if (room != null)
+            {
                 room.addClient(socket, writer);
                 System.out.println("Client added to room: " + roomName);
             }
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             System.out.println("Error adding client to room " + roomName + ": " + e.getMessage());
             e.printStackTrace();
         }

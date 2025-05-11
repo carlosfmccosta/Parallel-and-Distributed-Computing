@@ -5,3 +5,5 @@ alice: hi @bot how is spains weather normally
 [Bot]: Hi! Spain's weather can vary greatly depending on the region and time of year. Generally, the country has a Mediterranean climate with hot summers and mild winters.\n\nIn the south, near the Mediterranean coast, the weather is typically warm and sunny during the summer months (June to September), with average highs around 28°C (82°F). Winters are generally mild, with average lows around 12°C (54°F).\n\nIn the north, near the Atlantic coast, the climate is cooler and wetter than in the south. Summers are mild and pleasant, while winters can be cool and rainy.\n\nThe central regions of Spain, including Madrid, have a more continental climate with cold winters and hot summers. Winters can be quite chilly, especially in the mountains, while summer temperatures often reach 35°C (95°F) or higher.\n\nOverall, Spain's weather is known for its diversity, making it a popular destination for tourists seeking sunshine, beaches, or skiing adventures!
 alice: @bot thanks
 [Bot]: You're welcome, Alice!
+alice: hi @bot what is capital of spain
+[Bot]: Hi! The capital of Spain is Madrid.

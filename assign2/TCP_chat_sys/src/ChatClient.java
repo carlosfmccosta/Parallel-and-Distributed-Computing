@@ -63,24 +63,22 @@ public class ChatClient {
                     return;
                 }
 
-                Thread listener = new Thread(() -> {
+                Thread.ofVirtual().start(() -> {
                     try {
                         String serverMsg;
-                        while ((serverMsg = in.readLine()) != null) {
-                            // Clear the current line and print the server message
+                        while ((serverMsg = in.readLine()) != null)
+                        {
                             System.out.print("\r" + " ".repeat(currentInput.length() + 5) + "\r");
                             System.out.println(serverMsg);
-
-                            // Reprint the input prompt and current input
                             System.out.print("You: " + currentInput);
                         }
-                    } catch (IOException e) {
+                    }
+                    catch (IOException e)
+                    {
                         System.out.println("\nConnection closed.");
                     }
                 });
 
-                listener.setDaemon(true);
-                listener.start();
 
                 System.out.print("You: ");
 
@@ -98,11 +96,8 @@ public class ChatClient {
                                 String roomName = input.substring(6).trim();
                                 System.out.println("Attempting to join room: " + roomName);
 
-                                // Send the join command
                                 out.println(input);
 
-                                // Wait for the server to process the room change
-                                // This prevents sending any other commands during transition
                                 Thread.sleep(300);
                             }
                             finally
