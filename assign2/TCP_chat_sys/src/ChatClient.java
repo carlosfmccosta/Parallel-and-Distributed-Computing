@@ -1,7 +1,14 @@
 import java.io.*;
 import java.net.*;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
+
 
 public class ChatClient {
 
@@ -40,7 +47,7 @@ public class ChatClient {
         int maxAttempts = 3;
         int attempt = 0;
         boolean connected = false;
-        Socket socket = null;
+        SSLSocket socket = null;
 
         while (attempt < maxAttempts && !connected)
         {
@@ -49,8 +56,24 @@ public class ChatClient {
             try
             {
                 System.out.println("Attempting to connect to server (Attempt " + attempt + "/" + maxAttempts + ")...");
-                socket = new Socket(serverIP, port);
+
+                KeyStore trustStore = KeyStore.getInstance("JKS");
+
+                try (FileInputStream tsFile = new FileInputStream("truststore.jks"))
+                {
+                    trustStore.load(tsFile, "123456".toCharArray());
+                }
+
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(trustStore);
+
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, tmf.getTrustManagers(), null);
+
+                SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+                socket = (SSLSocket) sslSocketFactory.createSocket(serverIP, port);
                 connected = true;
+
                 System.out.println("Connection established!");
 
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -79,7 +102,6 @@ public class ChatClient {
                     }
                 });
 
-
                 System.out.print("You: ");
 
                 while (scanner.hasNextLine())
@@ -95,9 +117,7 @@ public class ChatClient {
                             {
                                 String roomName = input.substring(6).trim();
                                 System.out.println("Attempting to join room: " + roomName);
-
                                 out.println(input);
-
                                 Thread.sleep(300);
                             }
                             finally
@@ -119,13 +139,15 @@ public class ChatClient {
                 }
 
             }
-            catch (IOException e)
+            catch (IOException | GeneralSecurityException e)
             {
                 System.out.println("Connection attempt " + attempt + " failed: " + e.getMessage());
             }
             catch (InterruptedException e)
             {
                 System.out.println("Client interrupted: " + e.getMessage());
+                Thread.currentThread().interrupt();
+                return;
             }
             finally
             {
@@ -135,10 +157,7 @@ public class ChatClient {
                     {
                         socket.close();
                     }
-                    catch (IOException e)
-                    {
-
-                    }
+                    catch (IOException ignored) {}
                 }
             }
 
@@ -161,6 +180,8 @@ public class ChatClient {
             System.out.println("Failed to connect after " + maxAttempts + " attempts.");
         }
     }
+
+
 
     private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
     {

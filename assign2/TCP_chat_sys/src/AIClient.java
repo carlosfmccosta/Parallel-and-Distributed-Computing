@@ -1,8 +1,14 @@
 import java.io.*;
 import java.net.*;
 import java.net.http.*;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 public class AIClient
 {
@@ -32,7 +38,22 @@ public class AIClient
             {
                 System.out.println("Attempting to connect to server...");
 
-                Socket socket = new Socket(serverIp, port);
+                KeyStore trustStore = KeyStore.getInstance("JKS");
+
+                try (FileInputStream tsFile = new FileInputStream("truststore.jks"))
+                {
+                    trustStore.load(tsFile, "123456".toCharArray());
+                }
+
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(trustStore);
+
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, tmf.getTrustManagers(), null);
+
+                SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+                SSLSocket socket = (SSLSocket) sslSocketFactory.createSocket(serverIp, port);
+
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -71,9 +92,10 @@ public class AIClient
 
                 break;
             }
-            catch (IOException | InterruptedException e)
+            catch (IOException | InterruptedException | GeneralSecurityException e)
             {
                 System.err.println("Connection failed, retrying in 5 seconds...");
+                e.printStackTrace();
                 try
                 {
                     TimeUnit.SECONDS.sleep(5);

@@ -4,6 +4,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.net.ssl.*;
+import java.security.KeyStore;
 
 public class ChatServer {
 
@@ -31,54 +33,70 @@ public class ChatServer {
         running = true;
         System.out.println("Chat server starting on port " + port + "...");
 
-        try (ServerSocket serverSocket = new ServerSocket(port))
-        {
-            this.serverSocket = serverSocket;
-            System.out.println("Chat server listening on port " + port);
+        try {
+            //load the keystore
+            KeyStore keyStore = KeyStore.getInstance("JKS");
 
-            getOrCreateRoom("general"); // creating the default room
-
-            while (running)
+            try (FileInputStream keyStoreFile = new FileInputStream("keystore.jks"))
             {
-                Socket clientSocket = serverSocket.accept();
-                System.out.println("New Client connected: " + clientSocket.getInetAddress().getHostAddress());
+                keyStore.load(keyStoreFile, "123456".toCharArray());
+            }
 
-                PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+            keyManagerFactory.init(keyStore, "123456".toCharArray());
 
-                lock.lock();
-                try
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(keyManagerFactory.getKeyManagers(), null, null);
+
+            SSLServerSocketFactory sslServerSocketFactory = sslContext.getServerSocketFactory();
+
+            try (SSLServerSocket serverSocket = (SSLServerSocket) sslServerSocketFactory.createServerSocket(port))
+            {
+                this.serverSocket = serverSocket;
+                System.out.println("Secure Chat server listening on port " + port);
+
+                getOrCreateRoom("general");
+
+                while (running)
                 {
-                    clientSockets.add(clientSocket);
-                    clientWriters.add(writer);
-                }
-                finally
-                {
-                    lock.unlock();
-                }
+                    SSLSocket clientSocket = (SSLSocket) serverSocket.accept();
+                    System.out.println("New Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-                Thread.ofVirtual().start(() -> {
+                    PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
+
+                    lock.lock();
+
                     try
                     {
-                        handleClient(clientSocket, writer);
+                        clientSockets.add(clientSocket);
+                        clientWriters.add(writer);
                     }
-                    catch (NoSuchAlgorithmException e)
+                    finally
                     {
-                        writer.println("AUTH_FAIL Server error");
-                        System.out.println("Hashing algorithm not available: " + e.getMessage());
-
-                        try
-                        {
-                            clientSocket.close();
-                        }
-                        catch (IOException ex)
-                        {
-                            System.out.println("Error closing client socket: " + ex.getMessage());
-                        }
+                        lock.unlock();
                     }
-                });
+
+                    Thread.ofVirtual().start(() -> {
+                        try {
+                            handleClient(clientSocket, writer);
+                        } catch (NoSuchAlgorithmException e) {
+                            writer.println("AUTH_FAIL Server error");
+                            System.out.println("Hashing algorithm not available: " + e.getMessage());
+
+                            try
+                            {
+                                clientSocket.close();
+                            }
+                            catch (IOException ex)
+                            {
+                                System.out.println("Error closing client socket: " + ex.getMessage());
+                            }
+                        }
+                    });
+                }
             }
         }
-        catch (IOException e)
+        catch (Exception e)
         {
             if (running)
             {
@@ -86,6 +104,7 @@ public class ChatServer {
             }
         }
     }
+
 
     public void stop_server()
     {
