@@ -1,1 +1,0 @@
-alice: @bot where is lisbon

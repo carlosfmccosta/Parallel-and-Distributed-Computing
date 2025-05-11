@@ -21,7 +21,8 @@ public class ChatServer {
     private final Map<String, PrintWriter> botWriters = new HashMap<>();
 
 
-    public ChatServer(int port) {
+    public ChatServer(int port)
+    {
         this.port = port;
     }
 
@@ -34,6 +35,8 @@ public class ChatServer {
         {
             this.serverSocket = serverSocket;
             System.out.println("Chat server listening on port " + port);
+
+            getOrCreateRoom("general"); // creating the default room
 
             while (running)
             {
@@ -127,33 +130,47 @@ public class ChatServer {
         }
     }
 
-    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException {
+
+    private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException
+    {
         String username = null;
 
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())))
+        {
             writer.println("AUTH_REQUEST");
 
-            while (username == null) {
+            while (username == null)
+            {
                 username = performAuthentication(in, writer);
-                if (username == null) {
-                    writer.println("AUTH_REQUEST"); // ask again after fail
+
+                if (username == null)
+                {
+                    writer.println("AUTH_REQUEST");
                 }
             }
 
             String botRoom = null;
-            if (username.startsWith("AI_Bot#")) {
+
+            if (username.startsWith("AI_Bot#"))
+            {
                 botRoom = username.split("#")[1];
                 username = "AI_Bot";
                 botWriters.put(botRoom, writer);
             }
 
-            broadcast("[Server] " + username + " has joined the chat.", null);
+            if(!username.equals("AI_Bot"))
+            {
+                broadcast("[Server] " + username + " has joined the chat.", null);
+            }
 
             chatLoop(username, in, writer, clientSocket, botRoom);
 
-        } catch (IOException e) {
+        } catch (IOException e)
+        {
             System.out.println("Client disconnected: " + clientSocket.getInetAddress());
-        } finally {
+        }
+        finally
+        {
             cleanupConnection(clientSocket, writer, username);
         }
     }
@@ -178,12 +195,11 @@ public class ChatServer {
                 }
 
                 writer.println("AUTH_SUCCESS");
-                return "AI_Bot#" + botRoom.trim(); // notice the trick
+                return "AI_Bot#" + botRoom.trim();
             }
             writer.println("AUTH_FAIL Invalid bot credentials");
             return null;
         }
-
 
         mode = mode.trim().toLowerCase();
 
@@ -257,6 +273,7 @@ public class ChatServer {
                     writer.println("AUTH_SUCCESS Welcome, " + username + "!");
 
                     writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default: /listrooms - List all rooms.");
+                    writer.println("AVAILABLE BOT COMMAND: @bot + message");
                     writer.flush();
 
                     return username;
@@ -295,33 +312,54 @@ public class ChatServer {
         addClientToRoom(currentRoomName, clientSocket, writer);
 
         String line;
+
         while ((line = in.readLine()) != null)
         {
-            if (line.startsWith("/join "))
-            {
+            if (line.startsWith("/join ")) {
                 String newRoomName = line.substring(6).trim();
 
-                if (!newRoomName.isEmpty() && !newRoomName.equals(currentRoomName))
-                {
-
-                    removeClientFromRoom(currentRoomName, clientSocket, writer);
-
-
-                    currentRoomName = newRoomName;
-                    currentRoom = getOrCreateRoom(currentRoomName);
-                    addClientToRoom(currentRoomName, clientSocket, writer);
-
-
-                    writer.println("You have joined room: " + currentRoomName);
-
-                    List<String> lastMessages = currentRoom.getLastFiveMessages();
-                    for (String msg : lastMessages)
+                if (!newRoomName.isEmpty()) {
+                    if (!newRoomName.equals(currentRoomName))
                     {
-                        writer.println(msg);
+                        synchronized (this)
+                        {
+                            removeClientFromRoom(currentRoomName, clientSocket, writer);
+
+                            String oldRoomName = currentRoomName;
+                            currentRoomName = newRoomName;
+                            currentRoom = getOrCreateRoom(currentRoomName);
+
+                            addClientToRoom(currentRoomName, clientSocket, writer);
+
+                            writer.println("You have joined room: " + currentRoomName);
+                            writer.flush();
+
+                            List<String> lastMessages = currentRoom.getLastFiveMessages();
+
+                            if (!lastMessages.isEmpty())
+                            {
+                                for (String msg : lastMessages)
+                                {
+                                    writer.println(msg);
+                                    writer.flush();
+                                }
+                            }
+
+                            System.out.println("User " + username + " moved from room " + oldRoomName + " to " + currentRoomName);
+                        }
+                    }
+                    else
+                    {
+                        writer.println("You're already in that room.");
+                        writer.flush();
                     }
                 }
+                else
+                {
+                    writer.println("Room name cannot be empty.");
+                    writer.flush();
+                }
             }
-
             else if (line.contains("@bot"))
             {
                 currentRoom.broadcast(username + ": " + line, writer);
@@ -331,11 +369,11 @@ public class ChatServer {
                 if (botWriter != null)
                 {
                     botWriter.println(line);
+                    botWriter.flush();
                 }
 
                 System.out.println("Sending to bot: " + line);
             }
-
             else if (line.startsWith("/leave"))
             {
                 removeClientFromRoom(currentRoomName, clientSocket, writer);
@@ -345,16 +383,24 @@ public class ChatServer {
                 addClientToRoom(currentRoomName, clientSocket, writer);
 
                 writer.println("You have left the room and joined the default room.");
+                writer.flush();
             }
             else if (line.equals("/listrooms"))
             {
                 StringBuilder roomList = new StringBuilder("Available rooms: ");
+                List<String> sortedRooms = new ArrayList<>(serverRooms.keySet());
 
-                for (String roomName : serverRooms.keySet())
+                sortedRooms.remove("general");
+                Collections.sort(sortedRooms);
+                roomList.append("general / ");
+
+                for (String room : sortedRooms)
                 {
-                    roomList.append(roomName).append(" / ");
+                    roomList.append(room).append(" / ");
                 }
+
                 writer.println(roomList.toString().trim());
+                writer.flush();
             }
             else
             {
@@ -364,11 +410,16 @@ public class ChatServer {
         }
     }
 
-    private PrintWriter findBotWriter(String roomName) {
+    private PrintWriter findBotWriter(String roomName)
+    {
         lock.lock();
-        try {
+
+        try
+        {
             return botWriters.get(roomName);
-        } finally {
+        }
+        finally
+        {
             lock.unlock();
         }
     }
@@ -381,7 +432,6 @@ public class ChatServer {
         try
         {
             clientSockets.remove(clientSocket);
-            clientWriters.remove(writer);
             clientWriters.remove(writer);
         }
         finally
@@ -433,7 +483,7 @@ public class ChatServer {
 
             ServerRoom room = serverRooms.computeIfAbsent(roomName, ServerRoom::new);
 
-            if (!roomExists && !"general".equals(roomName)) // Don't spawn bot for default "general" room
+            if (!roomExists && !"general".equals(roomName))
             {
                 System.out.println("New room created: " + roomName + ", spawning AI bot...");
 
@@ -462,27 +512,21 @@ public class ChatServer {
     }
 
 
-    private void addClientToRoom(String roomName, Socket socket, PrintWriter writer)
-    {
-        lock.lock();
-        try
-        {
+    private synchronized void addClientToRoom(String roomName, Socket socket, PrintWriter writer) {
+        try {
             ServerRoom room = serverRooms.get(roomName);
-
-            if (room != null)
-            {
+            if (room != null) {
                 room.addClient(socket, writer);
+                System.out.println("Client added to room: " + roomName);
             }
-        }
-        finally
-        {
-            lock.unlock();
+        } catch (Exception e) {
+            System.out.println("Error adding client to room " + roomName + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    private void removeClientFromRoom(String roomName, Socket socket, PrintWriter writer)
+    private synchronized void removeClientFromRoom(String roomName, Socket socket, PrintWriter writer)
     {
-        lock.lock();
         try
         {
             ServerRoom room = serverRooms.get(roomName);
@@ -490,23 +534,22 @@ public class ChatServer {
             if (room != null)
             {
                 room.removeClient(socket, writer);
+                System.out.println("Client removed from room: " + roomName);
 
-                if (room.clients.isEmpty())
+                if (room.isEmpty() && !"general".equals(roomName))
                 {
                     serverRooms.remove(roomName);
                     botWriters.remove(roomName);
+                    System.out.println("Room " + roomName + " is empty, shutting down its AI bot...");
 
-                    if (!"general".equals(roomName)) // Don't kill the default general bot
-                    {
-                        System.out.println("Room " + roomName + " is empty, shutting down its AI bot...");
-                        disconnectBot(roomName);
-                    }
+                    new Thread(() -> disconnectBot(roomName)).start();
                 }
             }
         }
-        finally
+        catch (Exception e)
         {
-            lock.unlock();
+            System.out.println("Error removing client from room " + roomName + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -516,15 +559,14 @@ public class ChatServer {
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream())))
         {
-            // Authenticate as AI_BOT
             out.println("AI_BOT");
             out.println("bot_password");
             out.println(roomName);
 
             String response = in.readLine();
+
             if ("AUTH_SUCCESS".equals(response))
             {
-                // Tell the bot to shut itself down
                 out.println("/shutdown");
             }
         }

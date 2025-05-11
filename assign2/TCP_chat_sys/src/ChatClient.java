@@ -1,15 +1,19 @@
 import java.io.*;
 import java.net.*;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ChatClient {
 
     private final String serverIP;
     private final int port;
+    private static volatile String currentInput = "";
+    private static final AtomicBoolean inRoomTransition = new AtomicBoolean(false);
 
-    public ChatClient(String serverAddress, int port) throws IllegalArgumentException {
-
-        if (serverAddress == null || serverAddress.trim().isEmpty()) {
+    public ChatClient(String serverAddress, int port) throws IllegalArgumentException
+    {
+        if (serverAddress == null || serverAddress.trim().isEmpty())
+        {
             throw new IllegalArgumentException("Server IP/hostname cannot be null or empty.");
         }
 
@@ -20,7 +24,6 @@ public class ChatClient {
 
         try
         {
-            // Checks if IP/hostname is valid
             InetAddress.getByName(serverAddress);
         }
         catch (UnknownHostException e)
@@ -61,27 +64,63 @@ public class ChatClient {
                 }
 
                 Thread listener = new Thread(() -> {
-                    try
-                    {
+                    try {
                         String serverMsg;
                         while ((serverMsg = in.readLine()) != null) {
-                            System.out.println("\n" + serverMsg);
-                            System.out.print("You: ");
+                            // Clear the current line and print the server message
+                            System.out.print("\r" + " ".repeat(currentInput.length() + 5) + "\r");
+                            System.out.println(serverMsg);
+
+                            // Reprint the input prompt and current input
+                            System.out.print("You: " + currentInput);
                         }
-                    }
-                    catch (IOException e)
-                    {
-                        System.out.println("Connection closed.");
+                    } catch (IOException e) {
+                        System.out.println("\nConnection closed.");
                     }
                 });
 
+                listener.setDaemon(true);
                 listener.start();
 
                 System.out.print("You: ");
+
                 while (scanner.hasNextLine())
                 {
                     String input = scanner.nextLine();
-                    out.println(input);
+                    currentInput = "";
+
+                    if (input.startsWith("/join "))
+                    {
+                        if (inRoomTransition.compareAndSet(false, true))
+                        {
+                            try
+                            {
+                                String roomName = input.substring(6).trim();
+                                System.out.println("Attempting to join room: " + roomName);
+
+                                // Send the join command
+                                out.println(input);
+
+                                // Wait for the server to process the room change
+                                // This prevents sending any other commands during transition
+                                Thread.sleep(300);
+                            }
+                            finally
+                            {
+                                inRoomTransition.set(false);
+                            }
+                        }
+                        else
+                        {
+                            System.out.println("Room transition in progress, please wait...");
+                        }
+                    }
+                    else
+                    {
+                        out.println(input);
+                    }
+
+                    System.out.print("You: ");
                 }
 
             }
@@ -89,9 +128,13 @@ public class ChatClient {
             {
                 System.out.println("Connection attempt " + attempt + " failed: " + e.getMessage());
             }
+            catch (InterruptedException e)
+            {
+                System.out.println("Client interrupted: " + e.getMessage());
+            }
             finally
             {
-                if (!connected)
+                if (!connected && socket != null)
                 {
                     try
                     {
@@ -99,7 +142,7 @@ public class ChatClient {
                     }
                     catch (IOException e)
                     {
-                        //ignore
+
                     }
                 }
             }
@@ -124,66 +167,74 @@ public class ChatClient {
         }
     }
 
-
-    private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException {
-        while (true) {
-            // Sempre começa perguntando login ou register
+    private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
+    {
+        while (true)
+        {
             System.out.println("Do you want to [login] or [register]?");
             System.out.print("Choice: ");
             String mode = scanner.nextLine().trim().toLowerCase();
 
-            while (!mode.equals("login") && !mode.equals("register")) {
+            while (!mode.equals("login") && !mode.equals("register"))
+            {
                 System.out.println("Invalid choice. Please enter 'login' or 'register'.");
                 System.out.print("Choice: ");
+
                 mode = scanner.nextLine().trim().toLowerCase();
             }
 
             out.println(mode);
 
-            while (true) {
+            while (true)
+            {
                 String serverPrompt = in.readLine();
 
-                if (serverPrompt == null) {
+                if (serverPrompt == null)
+                {
                     System.out.println("\nServer closed connection.");
                     return false;
                 }
 
-                if (serverPrompt.startsWith("Enter username:")) {
+                if (serverPrompt.startsWith("Enter username:"))
+                {
                     System.out.print("Username: ");
                     out.println(scanner.nextLine());
                 }
-                else if (serverPrompt.startsWith("Enter password:")) {
+                else if (serverPrompt.startsWith("Enter password:"))
+                {
                     System.out.print("Password: ");
                     out.println(scanner.nextLine());
                 }
-                else if (serverPrompt.startsWith("AUTH_SUCCESS")) {
+                else if (serverPrompt.startsWith("AUTH_SUCCESS"))
+                {
                     System.out.println(serverPrompt);
                     return true;
                 }
-                else if (serverPrompt.startsWith("AUTH_FAIL")) {
+                else if (serverPrompt.startsWith("AUTH_FAIL"))
+                {
                     System.out.println(serverPrompt);
 
-                    if (serverPrompt.contains("Too many failed") || serverPrompt.contains("Login failed")) {
-                        // Login falhou -> volta para a escolha login/register
+                    if (serverPrompt.contains("Too many failed") || serverPrompt.contains("Login failed"))
+                    {
                         break;
                     }
-                    // Se for erro menor (ex: senha errada mas pode tentar de novo), continua no while interno
                 }
-                else {
+                else
+                {
                     System.out.println("Server: " + serverPrompt);
                 }
             }
-            // Quando dá break (login falhou), volta aqui e pergunta novamente login ou register
         }
     }
 
-
-
-
     public static void main(String[] args) {
-
         String ip = "localhost";
         int port = 8080;
+
+        if (args.length >= 2) {
+            ip = args[0];
+            port = Integer.parseInt(args[1]);
+        }
 
         ChatClient client = new ChatClient(ip, port);
         client.start_client();

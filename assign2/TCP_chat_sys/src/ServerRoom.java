@@ -29,22 +29,27 @@ public class ServerRoom {
         writers.add(writer);
     }
 
+    public synchronized boolean isEmpty() {
+        return clients.isEmpty();
+    }
+
     public synchronized void removeClient(Socket socket, PrintWriter writer) {
         try {
             clients.remove(socket);
             writers.remove(writer);
 
-            // If the room is empty, delete the log file associated with this room
-            if (clients.isEmpty()) {
+            boolean b = !getName().equals("general");
+            if (clients.isEmpty() && b) {
                 File logFile = new File(name + "_log.txt");
                 if (logFile.exists()) {
-                    logFile.delete();  // Optionally remove the log file when room is empty
+                    logFile.delete();
                 }
             }
         } catch (Exception e) {
             System.out.println("Error removing client from room " + name + ": " + e.getMessage());
         }
     }
+
 
 
 
