@@ -395,14 +395,25 @@ public class ChatServer {
             }
             else if (line.startsWith("/leave"))
             {
-                removeClientFromRoom(currentRoomName, clientSocket, writer);
+                lock.lock();
 
-                currentRoomName = "general";
-                currentRoom = getOrCreateRoom(currentRoomName);
-                addClientToRoom(currentRoomName, clientSocket, writer);
+                try
+                {
+                    currentRoom.broadcast("[Server] " + username + " has left the room.", writer);
 
-                writer.println("You have left the room and joined the default room.");
-                writer.flush();
+                    removeClientFromRoom(currentRoomName, clientSocket, writer);
+
+                    currentRoomName = "general";
+                    currentRoom = getOrCreateRoom(currentRoomName);
+                    addClientToRoom(currentRoomName, clientSocket, writer);
+
+                    writer.println("You have left the room and joined the default room.");
+                    writer.flush();
+                }
+                finally
+                {
+                    lock.unlock();
+                }
             }
             else if (line.equals("/listrooms"))
             {
@@ -551,8 +562,10 @@ public class ChatServer {
         }
     }
 
-    private synchronized void removeClientFromRoom(String roomName, Socket socket, PrintWriter writer)
+    private void removeClientFromRoom(String roomName, Socket socket, PrintWriter writer)
     {
+        lock.lock();
+
         try
         {
             ServerRoom room = serverRooms.get(roomName);
@@ -568,7 +581,8 @@ public class ChatServer {
                     botWriters.remove(roomName);
                     System.out.println("Room " + roomName + " is empty, shutting down its AI bot...");
 
-                    new Thread(() -> disconnectBot(roomName)).start();
+                    final String roomToDisconnect = roomName;
+                    new Thread(() -> disconnectBot(roomToDisconnect)).start();
                 }
             }
         }
@@ -576,6 +590,9 @@ public class ChatServer {
         {
             System.out.println("Error removing client from room " + roomName + ": " + e.getMessage());
             e.printStackTrace();
+        }
+        finally {
+            lock.unlock();
         }
     }
 

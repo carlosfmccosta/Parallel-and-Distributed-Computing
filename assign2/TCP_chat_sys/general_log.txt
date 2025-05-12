@@ -7,3 +7,5 @@ alice: @bot thanks
 [Bot]: You're welcome, Alice!
 alice: hi @bot what is capital of spain
 [Bot]: Hi! The capital of Spain is Madrid.
+alice: hi @bot where is italy
+[Bot]: Italy is a country located in Southern Europe! It's situated on the Italian Peninsula, which is bordered by France, Switzerland, Austria, and Slovenia to the north; San Marino and Vatican City to the west; and the Mediterranean Sea to the south.
