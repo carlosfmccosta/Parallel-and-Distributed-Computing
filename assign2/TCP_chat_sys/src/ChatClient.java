@@ -2,12 +2,17 @@ import java.io.*;
 import java.net.*;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Scanner;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
+
+import static sun.net.www.protocol.http.HttpURLConnection.userAgent;
 
 
 public class ChatClient {
@@ -16,6 +21,7 @@ public class ChatClient {
     private final int port;
     private static volatile String currentInput = "";
     private static final AtomicBoolean inRoomTransition = new AtomicBoolean(false);
+    private static final String DEVICE_ID_FILE = "device_id.txt";
 
     public ChatClient(String serverAddress, int port) throws IllegalArgumentException
     {
@@ -185,6 +191,25 @@ public class ChatClient {
 
     private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
     {
+
+        String deviceFingerprint = generateDeviceFingerprint(userAgent);
+
+        out.println(deviceFingerprint);
+        String serverResponse = in.readLine();
+
+        if (serverResponse != null && serverResponse.startsWith("AUTH_SUCCESS"))
+        {
+            System.out.println(serverResponse);
+
+            String serverInfo;
+            while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
+            {
+                System.out.println(serverInfo);
+            }
+
+            return true;
+        }
+
         while (true)
         {
             System.out.println("Do you want to [login] or [register]?");
@@ -221,9 +246,16 @@ public class ChatClient {
                     System.out.print("Password: ");
                     out.println(scanner.nextLine());
                 }
-                else if (serverPrompt.startsWith("AUTH_SUCCESS"))
+                else if (serverPrompt.startsWith("AUTH_SUCCESS")) // HERE WE STILL NEED TO PASS THE DEVICE FINGER TO THE SERVER
                 {
                     System.out.println(serverPrompt);
+
+                    String serverInfo;
+                    while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
+                    {
+                        System.out.println(serverInfo);
+                    }
+
                     return true;
                 }
                 else if (serverPrompt.startsWith("AUTH_FAIL"))
@@ -242,6 +274,70 @@ public class ChatClient {
             }
         }
     }
+
+    private String getOrCreateDeviceUUID()
+    {
+        File file = new File(DEVICE_ID_FILE);
+
+        try
+        {
+            if (file.exists())
+            {
+                BufferedReader reader = new BufferedReader(new FileReader(file));
+                return reader.readLine();
+            }
+            else
+            {
+                String deviceUUID = UUID.randomUUID().toString();
+
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(file)))
+                {
+                    writer.write(deviceUUID);
+                }
+
+                return deviceUUID;
+            }
+        }
+        catch (IOException e)
+        {
+            System.out.println("Error reading/writing device UUID: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public String generateDeviceFingerprint(String userAgent)
+    {
+        String deviceUUID = getOrCreateDeviceUUID();
+        String deviceData = deviceUUID + "|" + userAgent;
+
+        try
+        {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(deviceData.getBytes());
+
+            StringBuilder hexString = new StringBuilder();
+
+            for (byte b : hash)
+            {
+                String hex = Integer.toHexString(0xff & b);
+
+                if (hex.length() == 1)
+                {
+                    hexString.append('0');
+                }
+
+                hexString.append(hex);
+            }
+
+            return hexString.toString();
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new RuntimeException("Failed to generate device fingerprint", e);
+        }
+    }
+
+
 
     public static void main(String[] args) {
         String ip = "localhost";

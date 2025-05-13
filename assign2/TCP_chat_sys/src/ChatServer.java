@@ -19,6 +19,7 @@ public class ChatServer {
     private final ReentrantLock lock = new ReentrantLock();
 
     private final ClientAuthSystem clientAuth = new ClientAuthSystem();
+    private final ClientTokenManager tokenManager = new ClientTokenManager();
 
     private final Map<String, PrintWriter> botWriters = new HashMap<>();
 
@@ -32,6 +33,13 @@ public class ChatServer {
     {
         running = true;
         System.out.println("Chat server starting on port " + port + "...");
+
+        tokenManager.loadTokensFromFile();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Server shutting down. Saving tokens...");
+            tokenManager.saveTokensToFile();
+        }));
 
         try {
             //load the keystore
@@ -196,6 +204,24 @@ public class ChatServer {
 
     private String performAuthentication(BufferedReader in, PrintWriter writer) throws IOException, NoSuchAlgorithmException
     {
+
+        String deviceFingerprint = in.readLine();
+        if (deviceFingerprint == null) return null;
+
+        String fingerprintUsername = tokenManager.findUsernameByFingerprint(deviceFingerprint);
+
+        if (fingerprintUsername != null)
+        {
+            writer.println("AUTH_SUCCESS Welcome back, " + fingerprintUsername + "!");
+            writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
+            writer.println("AVAILABLE BOT COMMAND: @bot + message");
+            writer.flush();
+
+            System.out.println("User " + fingerprintUsername + " authenticated via device fingerprint");
+
+            return fingerprintUsername;
+        }
+
         String mode = in.readLine();
         if (mode == null) return null;
 
@@ -250,8 +276,10 @@ public class ChatServer {
 
             if (clientAuth.registerClient(username, password))
             {
-                writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+                // Generate a token for this new registration with the device fingerprint
+                tokenManager.generateToken(username, deviceFingerprint, "general");
 
+                writer.println("AUTH_SUCCESS Welcome, " + username + "!");
                 writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
                 writer.flush();
 
@@ -289,8 +317,10 @@ public class ChatServer {
                 }
                 else
                 {
-                    writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+                    // Generate a token for this successful login with the device fingerprint
+                    tokenManager.generateToken(username, deviceFingerprint, "general");
 
+                    writer.println("AUTH_SUCCESS Welcome, " + username + "!");
                     writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default: /listrooms - List all rooms.");
                     writer.println("AVAILABLE BOT COMMAND: @bot + message");
                     writer.flush();
