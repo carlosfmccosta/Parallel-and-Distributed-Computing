@@ -8,11 +8,9 @@ alice: @bot thanks
 alice: hi @bot what is capital of spain
 [Bot]: Hi! The capital of Spain is Madrid.
 [Server] alice has joined the room.
-alice: login
-alice: /listroom
-[Server] alice has left the room.
 [Server] alice has joined the room.
-[Server] alice has joined the room.
-alice: login
-alice: hi @bot how are u
-[Bot]: Hi! I'm doing well, thanks for asking. How about you?
+alice: hi
+alice: how are u people
+alice: nice of u
+alice: hi @bot how is portugal fammously recognised by?
+[Bot]: Nice to meet you, Alice!\n\nPortugal is famously recognized for its stunning beaches, rich history, and vibrant culture. Here are a few examples:\n\n1. **Beaches**: Portugal has over 800 km of coastline, featuring some of the most beautiful and unspoiled beaches in Europe, such as Costa Vicentina, Algarve, and Costa de la Luz.\n2. **Port wine**: Portugal is renowned for its Port wine, a fortified wine produced exclusively in the Douro Valley. It's a symbol of Portuguese culture and a popular export worldwide.\n3. **Fado music**: Fado is a traditional style of Portuguese music characterized by soulful melodies and poignant lyrics. It's a UNESCO-recognized Intangible Cultural Heritage of Humanity.\n4. **Cuisine**: Portuguese cuisine is famous for its seafood, particularly bacalhau (cod), arroz doce (sweet rice pudding), and pastéis de Nata (custard tarts).\n5. **Explorers**: Portugal has a long history of exploration, with famous explorers like Vasco da Gama, Ferdinand Magellan, and Henry the Navigator playing key roles in the Age of Discovery.\n\nWhat's your interest in Portugal, Alice?

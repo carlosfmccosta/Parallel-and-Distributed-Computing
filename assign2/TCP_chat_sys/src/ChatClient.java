@@ -205,12 +205,10 @@ public class ChatClient {
 
         if (authToken != null && !authToken.isEmpty())
         {
-            // Send device fingerprint with token
             out.println(deviceFingerprint + "|TOKEN:" + authToken);
         }
         else
         {
-            // Send just device fingerprint
             out.println(deviceFingerprint);
         }
 
@@ -221,7 +219,6 @@ public class ChatClient {
             String token = null;
             String room = null;
 
-            // Parse token and room from server response
             if (serverResponse.contains("|TOKEN:"))
             {
                 String[] parts = serverResponse.split("\\|TOKEN:");
@@ -244,7 +241,6 @@ public class ChatClient {
                     this.authToken = token;
                     saveAuthToken(this.authToken);
 
-                    // Print only the success message
                     System.out.println(parts[0]);
                 }
                 else
@@ -257,29 +253,24 @@ public class ChatClient {
                 System.out.println(serverResponse);
             }
 
-            // Process command information and initial room messages
             String serverInfo;
             boolean commandInfoReceived = false;
             while ((serverInfo = in.readLine()) != null)
             {
-                // Process available commands information
                 if (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:"))
                 {
                     System.out.println(serverInfo);
                     commandInfoReceived = true;
                 }
-                // Track when we've received the room join confirmation
                 else if (serverInfo.startsWith("You have joined room:"))
                 {
                     System.out.println(serverInfo);
                 }
-                // Break when we see a message that's clearly a chat message or server broadcast
                 else if ((serverInfo.startsWith("[Server]") || serverInfo.contains(":")) && commandInfoReceived)
                 {
                     System.out.println(serverInfo);
                     break;
                 }
-                // Any other server message during authentication
                 else
                 {
                     System.out.println(serverInfo);
@@ -289,7 +280,6 @@ public class ChatClient {
             return true;
         }
 
-        // Handle login/register flow
         System.out.println("Do you want to [login] or [register]?");
         System.out.print("Choice: ");
         String mode = scanner.nextLine().trim().toLowerCase();
@@ -298,6 +288,7 @@ public class ChatClient {
         {
             System.out.println("Invalid choice. Please enter 'login' or 'register'.");
             System.out.print("Choice: ");
+
             mode = scanner.nextLine().trim().toLowerCase();
         }
 
@@ -326,7 +317,6 @@ public class ChatClient {
             else if (serverPrompt.startsWith("AUTH_SUCCESS"))
             {
                 String token = null;
-                String room = null;
 
                 if (serverPrompt.contains("|TOKEN:"))
                 {
@@ -340,7 +330,6 @@ public class ChatClient {
                         {
                             String[] roomParts = tokenPart.split("\\|ROOM:");
                             token = roomParts[0].trim();
-                            room = roomParts[1].trim();
                         }
                         else
                         {
@@ -361,29 +350,24 @@ public class ChatClient {
                     System.out.println(serverPrompt);
                 }
 
-                // Process command information and initial room messages
                 String serverInfo;
                 boolean commandInfoReceived = false;
                 while ((serverInfo = in.readLine()) != null)
                 {
-                    // Process available commands information
                     if (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:"))
                     {
                         System.out.println(serverInfo);
                         commandInfoReceived = true;
                     }
-                    // Track when we've received the room join confirmation
                     else if (serverInfo.startsWith("You have joined room:"))
                     {
                         System.out.println(serverInfo);
                     }
-                    // Break when we see a message that's clearly a chat message or server broadcast
                     else if ((serverInfo.startsWith("[Server]") || serverInfo.contains(":")) && commandInfoReceived)
                     {
                         System.out.println(serverInfo);
                         break;
                     }
-                    // Any other server message during authentication
                     else
                     {
                         System.out.println(serverInfo);

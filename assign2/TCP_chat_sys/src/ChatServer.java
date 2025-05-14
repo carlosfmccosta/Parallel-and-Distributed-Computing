@@ -7,7 +7,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.net.ssl.*;
 import java.security.KeyStore;
 
-public class ChatServer {
+public class ChatServer
+{
 
     private final int port;
     private boolean running;
@@ -30,7 +31,8 @@ public class ChatServer {
         this.port = port;
     }
 
-    private String getDeviceFingerprint(Socket socket) {
+    private String getDeviceFingerprint(Socket socket)
+    {
         return socketToFingerprintMap.get(socket);
     }
 
@@ -41,13 +43,15 @@ public class ChatServer {
 
         tokenManager.loadTokensFromFile();
 
+        tokenManager.purgeExpiredTokens();
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Server shutting down. Saving tokens...");
             tokenManager.saveTokensToFile();
         }));
 
-        try {
-            //load the keystore
+        try
+        {
             KeyStore keyStore = KeyStore.getInstance("JKS");
 
             try (FileInputStream keyStoreFile = new FileInputStream("keystore.jks"))
@@ -90,9 +94,12 @@ public class ChatServer {
                     }
 
                     Thread.ofVirtual().start(() -> {
-                        try {
+                        try
+                        {
                             handleClient(clientSocket, writer);
-                        } catch (NoSuchAlgorithmException e) {
+                        }
+                        catch (NoSuchAlgorithmException e)
+                        {
                             writer.println("AUTH_FAIL Server error");
                             System.out.println("Hashing algorithm not available: " + e.getMessage());
 
@@ -117,7 +124,6 @@ public class ChatServer {
             }
         }
     }
-
 
     public void stop_server()
     {
@@ -166,6 +172,7 @@ public class ChatServer {
     private void handleClient(Socket clientSocket, PrintWriter writer) throws NoSuchAlgorithmException
     {
         String username = null;
+        boolean isTokenAuth = false;
 
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())))
         {
@@ -173,7 +180,9 @@ public class ChatServer {
 
             while (username == null)
             {
-                username = performAuthentication(in, writer, clientSocket);
+                String[] authResult = performAuthentication(in, writer, clientSocket);
+                username = authResult[0];
+                isTokenAuth = "true".equals(authResult[1]);
 
                 if (username == null)
                 {
@@ -190,12 +199,12 @@ public class ChatServer {
                 botWriters.put(botRoom, writer);
             }
 
-            if(!username.equals("AI_Bot"))
+            if(!username.equals("AI_Bot") && !isTokenAuth)
             {
                 broadcast("[Server] " + username + " has joined the chat.", null);
             }
 
-            chatLoop(username, in, writer, clientSocket, botRoom);
+            chatLoop(username, in, writer, clientSocket, botRoom, isTokenAuth);
 
         } catch (IOException e)
         {
@@ -207,10 +216,10 @@ public class ChatServer {
         }
     }
 
-    private String performAuthentication(BufferedReader in, PrintWriter writer, Socket clientSocket) throws IOException, NoSuchAlgorithmException
+    private String[] performAuthentication(BufferedReader in, PrintWriter writer, Socket clientSocket) throws IOException, NoSuchAlgorithmException
     {
         String deviceFingerprint = in.readLine();
-        if (deviceFingerprint == null) return null;
+        if (deviceFingerprint == null) return new String[]{null, "false"};
 
         String token = null;
 
@@ -230,22 +239,21 @@ public class ChatServer {
             if (fingerprintUsername != null)
             {
                 String defaultRoom = tokenManager.getDefaultRoomForFingerprint(deviceFingerprint);
+
                 if (defaultRoom == null || defaultRoom.trim().isEmpty()) {
+
                     defaultRoom = "general";
                 }
 
-                // Generate a new token but preserve the default room
                 String newToken = tokenManager.generateToken(fingerprintUsername, deviceFingerprint, defaultRoom);
 
-                // Send response with token and room
                 writer.println("AUTH_SUCCESS Welcome back, " + fingerprintUsername + "!|TOKEN:" + newToken + "|ROOM:" + defaultRoom);
                 writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
                 writer.println("AVAILABLE BOT COMMAND: @bot + message");
                 writer.flush();
 
-                // Log successful authentication but don't broadcast the device fingerprint
                 System.out.println("User " + fingerprintUsername + " authenticated via token with default room: " + defaultRoom);
-                return fingerprintUsername;
+                return new String[]{fingerprintUsername, "true"};
             }
         }
 
@@ -254,7 +262,9 @@ public class ChatServer {
         if (fingerprintUsername != null)
         {
             String defaultRoom = tokenManager.getDefaultRoomForFingerprint(deviceFingerprint);
-            if (defaultRoom == null || defaultRoom.trim().isEmpty()) {
+
+            if (defaultRoom == null || defaultRoom.trim().isEmpty())
+            {
                 defaultRoom = "general";
             }
 
@@ -266,11 +276,12 @@ public class ChatServer {
             writer.flush();
 
             System.out.println("User " + fingerprintUsername + " authenticated via device fingerprint with default room: " + defaultRoom);
-            return fingerprintUsername;
+            return new String[]{fingerprintUsername, "true"};
         }
 
         String mode = in.readLine();
-        if (mode == null) return null;
+
+        if (mode == null) return new String[]{null, "false"};
 
         if ("AI_BOT".equals(mode))
         {
@@ -281,16 +292,18 @@ public class ChatServer {
 
                 String botRoom = in.readLine();
 
-                if (botRoom == null || botRoom.trim().isEmpty()) {
+                if (botRoom == null || botRoom.trim().isEmpty())
+                {
                     writer.println("AUTH_FAIL Room name cannot be empty");
-                    return null;
+                    return new String[]{null, "false"};
                 }
 
                 writer.println("AUTH_SUCCESS");
-                return "AI_Bot#" + botRoom.trim();
+                return new String[]{"AI_Bot#" + botRoom.trim(), "false"};
             }
+
             writer.println("AUTH_FAIL Invalid bot credentials");
-            return null;
+            return new String[]{null, "false"};
         }
 
         mode = mode.trim().toLowerCase();
@@ -303,13 +316,13 @@ public class ChatServer {
             if (username == null || username.trim().isEmpty())
             {
                 writer.println("AUTH_FAIL Username cannot be empty");
-                return null;
+                return new String[]{null, "false"};
             }
 
             if (clientAuth.usernameExists(username))
             {
                 writer.println("AUTH_FAIL Username already exists");
-                return null;
+                return new String[]{null, "false"};
             }
 
             writer.println("Enter password:");
@@ -318,7 +331,7 @@ public class ChatServer {
             if (password == null || password.trim().isEmpty())
             {
                 writer.println("AUTH_FAIL Password cannot be empty");
-                return null;
+                return new String[]{null, "false"};
             }
 
             if (clientAuth.registerClient(username, password))
@@ -329,12 +342,12 @@ public class ChatServer {
                 writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
                 writer.flush();
 
-                return username;
+                return new String[]{username, "false"};
             }
             else
             {
                 writer.println("AUTH_FAIL Registration failed");
-                return null;
+                return new String[]{null, "false"};
             }
         }
         else if (mode.equals("login"))
@@ -363,9 +376,10 @@ public class ChatServer {
                 }
                 else
                 {
-                    // Check for saved room preference or use general
                     String defaultRoom = tokenManager.getDefaultRoomForFingerprint(deviceFingerprint);
-                    if (defaultRoom == null || defaultRoom.trim().isEmpty()) {
+
+                    if (defaultRoom == null || defaultRoom.trim().isEmpty())
+                    {
                         defaultRoom = "general";
                     }
 
@@ -376,19 +390,19 @@ public class ChatServer {
                     writer.println("AVAILABLE BOT COMMAND: @bot + message");
                     writer.flush();
 
-                    return username;
+                    return new String[]{username, "false"};
                 }
             }
 
             writer.println("AUTH_FAIL Too many failed login attempts.");
-            return null;
+            return new String[]{null, "false"};
         }
 
         writer.println("AUTH_FAIL Invalid mode (must be 'login' or 'register')");
-        return null;
+        return new String[]{null, "false"};
     }
 
-    private void chatLoop(String username, BufferedReader in, PrintWriter writer, Socket clientSocket, String botRoom) throws IOException
+    private void chatLoop(String username, BufferedReader in, PrintWriter writer, Socket clientSocket, String botRoom, boolean isTokenAuth) throws IOException
     {
         if ("AI_Bot".equals(username))
         {
@@ -403,7 +417,6 @@ public class ChatServer {
                         room.broadcast(line, writer);
                     }
                 }
-                // Handle bot shutdown command if needed
                 else if (line.startsWith("/shutdown"))
                 {
                     System.out.println("Bot for room " + botRoom + " is shutting down.");
@@ -422,68 +435,77 @@ public class ChatServer {
 
         ServerRoom currentRoom = getOrCreateRoom(currentRoomName);
 
-        // Add client to room (this should happen before broadcasting join message)
         addClientToRoom(currentRoomName, clientSocket, writer);
 
-        // Send room join notification
         writer.println("You have joined room: " + currentRoomName);
         writer.flush();
 
-        // Broadcast to others (not the joining user) that someone joined
-        currentRoom.broadcast("[Server] " + username + " has joined the room.", writer);
+        if (!isTokenAuth)
+        {
+            currentRoom.broadcast("[Server] " + username + " has joined the room.", writer);
+        }
 
-        // Send the last few messages from the room
         List<String> lastMessages = currentRoom.getLastFiveMessages();
-        if (!lastMessages.isEmpty()) {
-            for (String msg : lastMessages) {
+
+        if (!lastMessages.isEmpty())
+        {
+            for (String msg : lastMessages)
+            {
                 writer.println(msg);
                 writer.flush();
             }
         }
 
         String line;
+
         while ((line = in.readLine()) != null)
         {
-            // Block any messages that might be authentication data
-            if (line.contains("TOKEN:") || (line.length() >= 64 && line.matches("[a-f0-9]{64}"))) {
+            if (line.contains("TOKEN:") || (line.length() >= 64 && line.matches("[a-f0-9]{64}")))
+            {
                 writer.println("[Server] Message blocked for security reasons.");
                 writer.flush();
+
                 continue;
             }
 
-            if (line.startsWith("/join ")) {
+
+            if (line.equalsIgnoreCase("login") || line.equalsIgnoreCase("register"))
+            {
+                writer.println("[Server] Message blocked to prevent confusion with authentication commands.");
+                writer.flush();
+
+                continue;
+            }
+
+            if (line.startsWith("/join "))
+            {
                 String newRoomName = line.substring(6).trim();
 
-                if (!newRoomName.isEmpty()) {
+                if (!newRoomName.isEmpty())
+                {
                     if (!newRoomName.equals(currentRoomName))
                     {
                         synchronized (this)
                         {
-                            // Notify the old room that user is leaving
                             currentRoom.broadcast("[Server] " + username + " has left the room.", writer);
 
-                            // Remove from old room
                             removeClientFromRoom(currentRoomName, clientSocket, writer);
 
                             String oldRoomName = currentRoomName;
                             currentRoomName = newRoomName;
                             currentRoom = getOrCreateRoom(currentRoomName);
 
-                            // Update the default room for this user
                             tokenManager.updateDefaultRoom(username, getDeviceFingerprint(clientSocket), currentRoomName);
 
-                            // Add to new room
                             addClientToRoom(currentRoomName, clientSocket, writer);
 
-                            // Notify the user they joined
                             writer.println("You have joined room: " + currentRoomName);
                             writer.flush();
 
-                            // Broadcast to others in the new room
                             currentRoom.broadcast("[Server] " + username + " has joined the room.", writer);
 
-                            // Send the last few messages from the room
                             lastMessages = currentRoom.getLastFiveMessages();
+
                             if (!lastMessages.isEmpty())
                             {
                                 for (String msg : lastMessages)
@@ -510,7 +532,6 @@ public class ChatServer {
             }
             else if (line.contains("@bot"))
             {
-                // Forward messages with @bot to the bot and other users
                 currentRoom.broadcast(username + ": " + line, writer);
 
                 PrintWriter botWriter = findBotWriter(currentRoomName);
@@ -520,7 +541,8 @@ public class ChatServer {
                     botWriter.println(line);
                     botWriter.flush();
                 }
-                else {
+                else
+                {
                     writer.println("[Server] No bot is available in this room.");
                     writer.flush();
                 }
@@ -546,7 +568,6 @@ public class ChatServer {
                     writer.println("You have left the room and joined the \'general\' room.");
                     writer.flush();
 
-                    // Broadcast to general room that user joined
                     currentRoom.broadcast("[Server] " + username + " has joined the room.", writer);
                 }
                 finally
@@ -573,7 +594,6 @@ public class ChatServer {
             }
             else
             {
-                // Regular chat message
                 System.out.println(username + ": " + line);
                 currentRoom.broadcast(username + ": " + line, writer);
             }
@@ -728,7 +748,8 @@ public class ChatServer {
             System.out.println("Error removing client from room " + roomName + ": " + e.getMessage());
             e.printStackTrace();
         }
-        finally {
+        finally
+        {
             lock.unlock();
         }
     }

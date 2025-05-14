@@ -11,6 +11,7 @@ public class ClientTokenManager {
     private final Map<String, UserToken> tokensByFingerprint = new ConcurrentHashMap<>();
     private final Map<String, Map<String, UserToken>> tokensByUsername = new ConcurrentHashMap<>();
     private final ReentrantLock fileLock = new ReentrantLock();
+    private final Long tokenLim = 86400000L;
 
     public static class UserToken implements Serializable
     {
@@ -95,6 +96,7 @@ public class ClientTokenManager {
         SecureRandom random = new SecureRandom();
         byte[] bytes = new byte[32]; // 256 bits
         random.nextBytes(bytes);
+
         return Base64.getEncoder().encodeToString(bytes);
     }
 
@@ -149,11 +151,12 @@ public class ClientTokenManager {
         return null;
     }
 
-    public void updateDefaultRoom(String username, String deviceFingerprint, String newRoom) {
+    public void updateDefaultRoom(String username, String deviceFingerprint, String newRoom)
+    {
         UserToken token = tokensByFingerprint.get(deviceFingerprint);
 
-        if (token != null) {
-            // Generate a new token with the updated room
+        if (token != null)
+        {
             generateToken(username, deviceFingerprint, newRoom);
             saveTokensToFile();
         }
@@ -174,10 +177,13 @@ public class ClientTokenManager {
     {
         Map<String, UserToken> userTokens = tokensByUsername.remove(username);
 
-        if (userTokens != null) {
-            for (UserToken token : userTokens.values()) {
+        if (userTokens != null)
+        {
+            for (UserToken token : userTokens.values())
+            {
                 tokensByFingerprint.remove(token.getDeviceFingerprint());
             }
+
             saveTokensToFile();
         }
     }
@@ -247,14 +253,14 @@ public class ClientTokenManager {
         }
     }
 
-    public void purgeExpiredTokens(long maxAgeMillis)
+    public void purgeExpiredTokens()
     {
         long now = System.currentTimeMillis();
         List<UserToken> tokensToRemove = new ArrayList<>();
 
         for (UserToken token : tokensByFingerprint.values())
         {
-            if (now - token.getLastAccessTime() > maxAgeMillis)
+            if (now - token.getLastAccessTime() > tokenLim)
             {
                 tokensToRemove.add(token);
             }
