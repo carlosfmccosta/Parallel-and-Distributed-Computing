@@ -1,12 +1,13 @@
-public class ChatSystemLauncher {
+public class ChatSystemLauncher
+{
     public static void main(String[] args)
     {
-        Thread.startVirtualThread(() -> {
+        Thread serverThread = Thread.startVirtualThread(() -> {
             ChatServer server = new ChatServer(8080);
             server.start_server();
         });
 
-        Thread.startVirtualThread(() -> {
+        Thread botThread = Thread.startVirtualThread(() -> {
             try
             {
                 Thread.sleep(3000); // Wait for server to start
@@ -19,5 +20,14 @@ public class ChatSystemLauncher {
                 e.printStackTrace();
             }
         });
+
+        try
+        {
+            serverThread.join();
+        }
+        catch (InterruptedException e)
+        {
+            e.printStackTrace();
+        }
     }
 }
