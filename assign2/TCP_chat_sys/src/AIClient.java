@@ -68,8 +68,10 @@ public class AIClient
                 System.out.println("Connected to chat server. Waiting for messages...");
 
                 Thread.startVirtualThread(() -> {
-                    try {
+                    try
+                    {
                         String message;
+
                         while ((message = in.readLine()) != null)
                         {
                             System.out.println("Received message: " + message);
@@ -317,7 +319,8 @@ public class AIClient
         return finalPrompt;
     }
 
-    private String escapeJson(String input) {
+    private String escapeJson(String input)
+    {
         String escapedInput = input.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
