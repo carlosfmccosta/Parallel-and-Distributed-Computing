@@ -205,10 +205,12 @@ public class ChatClient {
 
         if (authToken != null && !authToken.isEmpty())
         {
+            // Send device fingerprint with token
             out.println(deviceFingerprint + "|TOKEN:" + authToken);
         }
         else
         {
+            // Send just device fingerprint
             out.println(deviceFingerprint);
         }
 
@@ -216,15 +218,34 @@ public class ChatClient {
 
         if (serverResponse != null && serverResponse.startsWith("AUTH_SUCCESS"))
         {
+            String token = null;
+            String room = null;
+
+            // Parse token and room from server response
             if (serverResponse.contains("|TOKEN:"))
             {
                 String[] parts = serverResponse.split("\\|TOKEN:");
 
                 if (parts.length > 1)
                 {
-                    this.authToken = parts[1].trim();
+                    String tokenPart = parts[1];
+
+                    if (tokenPart.contains("|ROOM:"))
+                    {
+                        String[] roomParts = tokenPart.split("\\|ROOM:");
+                        token = roomParts[0].trim();
+                        room = roomParts[1].trim();
+                    }
+                    else
+                    {
+                        token = tokenPart.trim();
+                    }
+
+                    this.authToken = token;
                     saveAuthToken(this.authToken);
-                    System.out.println(parts[0]); // Only print the success message
+
+                    // Print only the success message
+                    System.out.println(parts[0]);
                 }
                 else
                 {
@@ -236,100 +257,157 @@ public class ChatClient {
                 System.out.println(serverResponse);
             }
 
+            // Process command information and initial room messages
             String serverInfo;
-
-            while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
+            boolean commandInfoReceived = false;
+            while ((serverInfo = in.readLine()) != null)
             {
-                System.out.println(serverInfo);
+                // Process available commands information
+                if (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:"))
+                {
+                    System.out.println(serverInfo);
+                    commandInfoReceived = true;
+                }
+                // Track when we've received the room join confirmation
+                else if (serverInfo.startsWith("You have joined room:"))
+                {
+                    System.out.println(serverInfo);
+                }
+                // Break when we see a message that's clearly a chat message or server broadcast
+                else if ((serverInfo.startsWith("[Server]") || serverInfo.contains(":")) && commandInfoReceived)
+                {
+                    System.out.println(serverInfo);
+                    break;
+                }
+                // Any other server message during authentication
+                else
+                {
+                    System.out.println(serverInfo);
+                }
             }
 
             return true;
         }
 
+        // Handle login/register flow
+        System.out.println("Do you want to [login] or [register]?");
+        System.out.print("Choice: ");
+        String mode = scanner.nextLine().trim().toLowerCase();
+
+        while (!mode.equals("login") && !mode.equals("register"))
+        {
+            System.out.println("Invalid choice. Please enter 'login' or 'register'.");
+            System.out.print("Choice: ");
+            mode = scanner.nextLine().trim().toLowerCase();
+        }
+
+        out.println(mode);
+
         while (true)
         {
-            System.out.println("Do you want to [login] or [register]?");
-            System.out.print("Choice: ");
-            String mode = scanner.nextLine().trim().toLowerCase();
+            String serverPrompt = in.readLine();
 
-            while (!mode.equals("login") && !mode.equals("register"))
+            if (serverPrompt == null)
             {
-                System.out.println("Invalid choice. Please enter 'login' or 'register'.");
-                System.out.print("Choice: ");
-
-                mode = scanner.nextLine().trim().toLowerCase();
+                System.out.println("\nServer closed connection.");
+                return false;
             }
 
-            out.println(mode);
-
-            while (true)
+            if (serverPrompt.startsWith("Enter username:"))
             {
-                String serverPrompt = in.readLine();
+                System.out.print("Username: ");
+                out.println(scanner.nextLine());
+            }
+            else if (serverPrompt.startsWith("Enter password:"))
+            {
+                System.out.print("Password: ");
+                out.println(scanner.nextLine());
+            }
+            else if (serverPrompt.startsWith("AUTH_SUCCESS"))
+            {
+                String token = null;
+                String room = null;
 
-                if (serverPrompt == null)
+                if (serverPrompt.contains("|TOKEN:"))
                 {
-                    System.out.println("\nServer closed connection.");
-                    return false;
-                }
+                    String[] parts = serverPrompt.split("\\|TOKEN:");
 
-                if (serverPrompt.startsWith("Enter username:"))
-                {
-                    System.out.print("Username: ");
-                    out.println(scanner.nextLine());
-                }
-                else if (serverPrompt.startsWith("Enter password:"))
-                {
-                    System.out.print("Password: ");
-                    out.println(scanner.nextLine());
-                }
-                else if (serverPrompt.startsWith("AUTH_SUCCESS"))
-                {
-                    if (serverPrompt.contains("|TOKEN:"))
+                    if (parts.length > 1)
                     {
-                        String[] parts = serverPrompt.split("\\|TOKEN:");
+                        String tokenPart = parts[1];
 
-                        if (parts.length > 1)
+                        if (tokenPart.contains("|ROOM:"))
                         {
-                            this.authToken = parts[1].trim();
-                            saveAuthToken(this.authToken);
-                            System.out.println(parts[0]);
+                            String[] roomParts = tokenPart.split("\\|ROOM:");
+                            token = roomParts[0].trim();
+                            room = roomParts[1].trim();
                         }
                         else
                         {
-                            System.out.println(serverPrompt);
+                            token = tokenPart.trim();
                         }
+
+                        this.authToken = token;
+                        saveAuthToken(this.authToken);
+                        System.out.println(parts[0]);
                     }
                     else
                     {
                         System.out.println(serverPrompt);
                     }
-
-                    out.println(deviceFingerprint);
-
-                    String serverInfo;
-
-                    while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
-                    {
-                        System.out.println(serverInfo);
-                    }
-
-                    return true;
-                }
-                else if (serverPrompt.startsWith("AUTH_FAIL"))
-                {
-                    System.out.println(serverPrompt);
-
-                    if (serverPrompt.contains("Too many failed") || serverPrompt.contains("Login failed"))
-                    {
-                        break;
-                    }
                 }
                 else
                 {
-                    System.out.println("Server: " + serverPrompt);
+                    System.out.println(serverPrompt);
+                }
+
+                // Process command information and initial room messages
+                String serverInfo;
+                boolean commandInfoReceived = false;
+                while ((serverInfo = in.readLine()) != null)
+                {
+                    // Process available commands information
+                    if (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:"))
+                    {
+                        System.out.println(serverInfo);
+                        commandInfoReceived = true;
+                    }
+                    // Track when we've received the room join confirmation
+                    else if (serverInfo.startsWith("You have joined room:"))
+                    {
+                        System.out.println(serverInfo);
+                    }
+                    // Break when we see a message that's clearly a chat message or server broadcast
+                    else if ((serverInfo.startsWith("[Server]") || serverInfo.contains(":")) && commandInfoReceived)
+                    {
+                        System.out.println(serverInfo);
+                        break;
+                    }
+                    // Any other server message during authentication
+                    else
+                    {
+                        System.out.println(serverInfo);
+                    }
+                }
+
+                return true;
+            }
+            else if (serverPrompt.startsWith("AUTH_FAIL"))
+            {
+                System.out.println(serverPrompt);
+
+                if (serverPrompt.contains("Too many failed") || serverPrompt.contains("Login failed"))
+                {
+                    break;
                 }
             }
+            else
+            {
+                System.out.println("Server: " + serverPrompt);
+            }
         }
+
+        return false;
     }
 
     private String getOrCreateDeviceUUID()

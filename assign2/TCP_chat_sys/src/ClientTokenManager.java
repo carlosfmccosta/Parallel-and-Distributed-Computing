@@ -149,6 +149,16 @@ public class ClientTokenManager {
         return null;
     }
 
+    public void updateDefaultRoom(String username, String deviceFingerprint, String newRoom) {
+        UserToken token = tokensByFingerprint.get(deviceFingerprint);
+
+        if (token != null) {
+            // Generate a new token with the updated room
+            generateToken(username, deviceFingerprint, newRoom);
+            saveTokensToFile();
+        }
+    }
+
     public String getDefaultRoomForFingerprint(String deviceFingerprint)
     {
         UserToken token = tokensByFingerprint.get(deviceFingerprint);
