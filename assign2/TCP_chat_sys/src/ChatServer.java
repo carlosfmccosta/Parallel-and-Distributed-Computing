@@ -204,21 +204,48 @@ public class ChatServer {
 
     private String performAuthentication(BufferedReader in, PrintWriter writer) throws IOException, NoSuchAlgorithmException
     {
-
         String deviceFingerprint = in.readLine();
         if (deviceFingerprint == null) return null;
+
+        String token = null;
+
+        if (deviceFingerprint.contains("|TOKEN:"))
+        {
+            String[] parts = deviceFingerprint.split("\\|TOKEN:");
+            deviceFingerprint = parts[0];
+            token = parts[1];
+        }
+
+        if (token != null && !token.isEmpty())
+        {
+            String fingerprintUsername = tokenManager.findUsernameByTokenAndFingerprint(token, deviceFingerprint);
+
+            if (fingerprintUsername != null)
+            {
+                String newToken = tokenManager.generateToken(fingerprintUsername, deviceFingerprint, "general");
+
+                writer.println("AUTH_SUCCESS Welcome back, " + fingerprintUsername + "!|TOKEN:" + newToken);
+                writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
+                writer.println("AVAILABLE BOT COMMAND: @bot + message");
+                writer.flush();
+
+                System.out.println("User " + fingerprintUsername + " authenticated via token");
+                return fingerprintUsername;
+            }
+        }
 
         String fingerprintUsername = tokenManager.findUsernameByFingerprint(deviceFingerprint);
 
         if (fingerprintUsername != null)
         {
-            writer.println("AUTH_SUCCESS Welcome back, " + fingerprintUsername + "!");
+            String newToken = tokenManager.generateToken(fingerprintUsername, deviceFingerprint, "general");
+
+            writer.println("AUTH_SUCCESS Welcome back, " + fingerprintUsername + "!|TOKEN:" + newToken);
             writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
             writer.println("AVAILABLE BOT COMMAND: @bot + message");
             writer.flush();
 
             System.out.println("User " + fingerprintUsername + " authenticated via device fingerprint");
-
             return fingerprintUsername;
         }
 
@@ -276,10 +303,9 @@ public class ChatServer {
 
             if (clientAuth.registerClient(username, password))
             {
-                // Generate a token for this new registration with the device fingerprint
-                tokenManager.generateToken(username, deviceFingerprint, "general");
+                String newToken = tokenManager.generateToken(username, deviceFingerprint, "general");
 
-                writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+                writer.println("AUTH_SUCCESS Welcome, " + username + "!|TOKEN:" + newToken);
                 writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default : /listrooms - List all rooms.");
                 writer.flush();
 
@@ -317,10 +343,9 @@ public class ChatServer {
                 }
                 else
                 {
-                    // Generate a token for this successful login with the device fingerprint
-                    tokenManager.generateToken(username, deviceFingerprint, "general");
+                    String newToken = tokenManager.generateToken(username, deviceFingerprint, "general");
 
-                    writer.println("AUTH_SUCCESS Welcome, " + username + "!");
+                    writer.println("AUTH_SUCCESS Welcome, " + username + "!|TOKEN:" + newToken);
                     writer.println("AVAILABLE COMMANDS: /join <room_name> - Join/Create chat room :/leave - Leave room&return to default: /listrooms - List all rooms.");
                     writer.println("AVAILABLE BOT COMMAND: @bot + message");
                     writer.flush();
@@ -548,22 +573,18 @@ public class ChatServer {
                 System.out.println("New room created: " + roomName + ", spawning AI bot...");
 
                 Thread.ofVirtual().start(() -> {
-                    try {
-                        AIClient bot = new AIClient(
-                                "localhost",
-                                8080,
-                                "http://localhost:11434",
-                                "llama3",
-                                roomName
-                        );
+                    try
+                    {
+                        AIClient bot = new AIClient("localhost", 8080, "http://localhost:11434", "llama3", roomName);
                         bot.start();
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e)
+                    {
                         e.printStackTrace();
                     }
                 });
 
             }
-
             return room;
         }
         finally

@@ -12,9 +12,6 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
 
-import static sun.net.www.protocol.http.HttpURLConnection.userAgent;
-
-
 public class ChatClient {
 
     private final String serverIP;
@@ -22,6 +19,8 @@ public class ChatClient {
     private static volatile String currentInput = "";
     private static final AtomicBoolean inRoomTransition = new AtomicBoolean(false);
     private static final String DEVICE_ID_FILE = "device_id.txt";
+    private static final String AUTH_TOKEN_FILE = "auth_token.txt";
+    private String authToken;
 
     public ChatClient(String serverAddress, int port) throws IllegalArgumentException
     {
@@ -46,6 +45,7 @@ public class ChatClient {
 
         this.serverIP = serverAddress;
         this.port = port;
+        this.authToken = loadAuthToken();
     }
 
     public void start_client()
@@ -97,6 +97,18 @@ public class ChatClient {
                         String serverMsg;
                         while ((serverMsg = in.readLine()) != null)
                         {
+                            if (serverMsg.contains("|TOKEN:"))
+                            {
+                                String[] parts = serverMsg.split("\\|TOKEN:");
+
+                                if (parts.length > 1)
+                                {
+                                    this.authToken = parts[1].trim();
+                                    saveAuthToken(this.authToken);
+                                }
+                                serverMsg = parts[0];
+                            }
+
                             System.out.print("\r" + " ".repeat(currentInput.length() + 5) + "\r");
                             System.out.println(serverMsg);
                             System.out.print("You: " + currentInput);
@@ -187,21 +199,45 @@ public class ChatClient {
         }
     }
 
-
-
     private boolean handleAuthentication(BufferedReader in, PrintWriter out, Scanner scanner) throws IOException
     {
+        String deviceFingerprint = generateDeviceFingerprint(getUserAgent());
 
-        String deviceFingerprint = generateDeviceFingerprint(userAgent);
+        if (authToken != null && !authToken.isEmpty())
+        {
+            out.println(deviceFingerprint + "|TOKEN:" + authToken);
+        }
+        else
+        {
+            out.println(deviceFingerprint);
+        }
 
-        out.println(deviceFingerprint);
         String serverResponse = in.readLine();
 
         if (serverResponse != null && serverResponse.startsWith("AUTH_SUCCESS"))
         {
-            System.out.println(serverResponse);
+            if (serverResponse.contains("|TOKEN:"))
+            {
+                String[] parts = serverResponse.split("\\|TOKEN:");
+
+                if (parts.length > 1)
+                {
+                    this.authToken = parts[1].trim();
+                    saveAuthToken(this.authToken);
+                    System.out.println(parts[0]); // Only print the success message
+                }
+                else
+                {
+                    System.out.println(serverResponse);
+                }
+            }
+            else
+            {
+                System.out.println(serverResponse);
+            }
 
             String serverInfo;
+
             while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
             {
                 System.out.println(serverInfo);
@@ -246,11 +282,32 @@ public class ChatClient {
                     System.out.print("Password: ");
                     out.println(scanner.nextLine());
                 }
-                else if (serverPrompt.startsWith("AUTH_SUCCESS")) // HERE WE STILL NEED TO PASS THE DEVICE FINGER TO THE SERVER
+                else if (serverPrompt.startsWith("AUTH_SUCCESS"))
                 {
-                    System.out.println(serverPrompt);
+                    if (serverPrompt.contains("|TOKEN:"))
+                    {
+                        String[] parts = serverPrompt.split("\\|TOKEN:");
+
+                        if (parts.length > 1)
+                        {
+                            this.authToken = parts[1].trim();
+                            saveAuthToken(this.authToken);
+                            System.out.println(parts[0]);
+                        }
+                        else
+                        {
+                            System.out.println(serverPrompt);
+                        }
+                    }
+                    else
+                    {
+                        System.out.println(serverPrompt);
+                    }
+
+                    out.println(deviceFingerprint);
 
                     String serverInfo;
+
                     while ((serverInfo = in.readLine()) != null && (serverInfo.startsWith("AVAILABLE COMMANDS:") || serverInfo.startsWith("AVAILABLE BOT COMMAND:")))
                     {
                         System.out.println(serverInfo);
@@ -337,7 +394,40 @@ public class ChatClient {
         }
     }
 
+    private String getUserAgent()
+    {
+        return System.getProperty("os.name") + " " + System.getProperty("os.version");
+    }
 
+    private void saveAuthToken(String token)
+    {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(AUTH_TOKEN_FILE)))
+        {
+            writer.write(token);
+        }
+        catch (IOException e)
+        {
+            System.out.println("Error saving auth token: " + e.getMessage());
+        }
+    }
+
+    private String loadAuthToken()
+    {
+        File file = new File(AUTH_TOKEN_FILE);
+
+        if (file.exists())
+        {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file)))
+            {
+                return reader.readLine();
+            }
+            catch (IOException e)
+            {
+                System.out.println("Error loading auth token: " + e.getMessage());
+            }
+        }
+        return null;
+    }
 
     public static void main(String[] args) {
         String ip = "localhost";

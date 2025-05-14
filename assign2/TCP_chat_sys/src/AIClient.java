@@ -67,9 +67,6 @@ public class AIClient
 
                 System.out.println("Connected to chat server. Waiting for messages...");
 
-                out.println("/join " + currentRoom);
-                System.out.println("Joined room: " + currentRoom);
-
                 Thread.startVirtualThread(() -> {
                     try {
                         String message;
@@ -125,7 +122,6 @@ public class AIClient
         return false;
     }
 
-
     private boolean authenticateBot(BufferedReader in, PrintWriter out) throws IOException
     {
         if (!waitForAuthRequest(in))
@@ -134,7 +130,14 @@ public class AIClient
             return false;
         }
 
+        String deviceId = "BOT_DEVICE_" + currentRoom;
+        System.out.println("Sending device identifier: " + deviceId);
+        out.println(deviceId);
+
+        System.out.println("Sending AI_BOT identifier");
         out.println("AI_BOT");
+
+        System.out.println("Sending bot password");
         out.println("bot_password");
 
         String serverMessage = in.readLine();
@@ -145,24 +148,29 @@ public class AIClient
             return false;
         }
 
-        if (serverMessage.startsWith("Enter room to join:") || serverMessage.startsWith("AUTH_SUCCESS"))
+        System.out.println("Received from server: " + serverMessage);
+
+        if (serverMessage.startsWith("Enter room to join:"))
         {
-            System.out.println("Bot logged in successfully!");
-
-
-            if (serverMessage.startsWith("Enter room to join:"))
-            {
-                out.println(currentRoom);  //
-                System.out.println("Joined room: " + currentRoom);
-            }
+            System.out.println("Sending room to join: " + currentRoom);
+            out.println(currentRoom);
 
             serverMessage = in.readLine();
 
-            if (serverMessage != null)
+            if (serverMessage != null && serverMessage.startsWith("AUTH_SUCCESS"))
             {
-                System.out.println("Received message: " + serverMessage);
+                System.out.println("Bot successfully authenticated and joined room: " + currentRoom);
+                return true;
             }
-
+            else
+            {
+                System.out.println("Bot authentication failed for room: " + currentRoom + ": " + serverMessage);
+                return false;
+            }
+        }
+        else if (serverMessage.startsWith("AUTH_SUCCESS"))
+        {
+            System.out.println("Bot authenticated successfully!");
             return true;
         }
         else
@@ -174,7 +182,7 @@ public class AIClient
 
     private void sendBotResponse(String response, PrintWriter out)
     {
-        System.out.println("[Bot] Sending response to server and room" + currentRoom + " : " + response);
+        System.out.println("[Bot] Sending response to server and room " + currentRoom + " : " + response);
         out.println("[Bot]: " + response);
     }
 
