@@ -42,3 +42,9 @@ alice: hi @bot how are u today
 [Bot]: Hi Alice! I'm doing well, thanks for asking. By the way, Carlos asked about the capitals of Portugal and Spain earlier, and I didn't get a chance to respond yet. The capital of Portugal is Lisbon, and the capital of Spain is Madrid.
 hi @bot how are u today
 [Server] alice has left the room.
+[Server] alice has joined the room.
+alice: hi hi
+alice: hi hi
+alice: how are u people
+[Server] alice has left the room.
+[Server] alice has joined the room.

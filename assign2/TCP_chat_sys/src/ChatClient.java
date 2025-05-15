@@ -11,16 +11,20 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ChatClient {
 
     private final String serverIP;
     private final int port;
+
     private static volatile String currentInput = "";
     private static final AtomicBoolean inRoomTransition = new AtomicBoolean(false);
     private static final String DEVICE_ID_FILE = "device_id.txt";
     private static final String AUTH_TOKEN_FILE = "auth_token.txt";
     private volatile String authToken;
+
+    private final ReentrantLock authTokenLock = new ReentrantLock();
 
     public ChatClient(String serverAddress, int port) throws IllegalArgumentException
     {
@@ -463,13 +467,20 @@ public class ChatClient {
 
     private void saveAuthToken(String token)
     {
+        authTokenLock.lock();
+
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(AUTH_TOKEN_FILE)))
         {
+            this.authToken = token;
             writer.write(token);
         }
         catch (IOException e)
         {
             System.out.println("Error saving auth token: " + e.getMessage());
+        }
+        finally
+        {
+            authTokenLock.unlock();
         }
     }
 

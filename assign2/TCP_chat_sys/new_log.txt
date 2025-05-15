@@ -1,4 +1,0 @@
-[Server] alice has joined the room.
-alice: hi @bot how are u
-hi @bot how are u
-[Bot]: hi! i'm good, thanks for asking. what brings you here today?

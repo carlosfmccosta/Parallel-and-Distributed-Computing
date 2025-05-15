@@ -39,6 +39,26 @@ In another terminal, you can join the system by running:
 java -cp out ChatClient
 ```
 
+
+
+# Project Overview
+## Chat Client
+### Overview
+This project implements a secure chat client that connects to a chat server over SSL. The client supports user authentication, room management, and persistent device identification.
+
+### Features
+- Uses SSL for encrypted communication with the server
+- Supports both login and registration
+- Maintains authentication tokens for persistent login
+- Identifies client devices using a unique fingerprint
+- Automatically attempts to reconnect on connection failure
+
+### Implementation Notes
+- Written in Java with support for virtual threads
+- Thread synchronization via java.util.concurrent.locks
+- Secure device identification using SHA-256 hashing
+- The client implements a token-based authentication system that eliminates the need to provide credentials on each connection.
+
 ## AI Chat Bot Client
 ### Overview
 This project implements an AI chat bot client that connects to a chat server, monitors conversations, and responds to mentions using an Ollama-powered AI model.

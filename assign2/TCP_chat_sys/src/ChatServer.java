@@ -17,13 +17,18 @@ public class ChatServer
     private final List<Socket> clientSockets = new ArrayList<>();
     private final List<PrintWriter> clientWriters = new ArrayList<>();
     private final Map<String, ServerRoom> serverRooms = new HashMap<>();
-    private final ReentrantLock lock = new ReentrantLock();
 
     private final ClientAuthSystem clientAuth = new ClientAuthSystem();
     private final ClientTokenManager tokenManager = new ClientTokenManager();
     private final Map<Socket, String> socketToFingerprintMap = new HashMap<>();
 
     private final Map<String, PrintWriter> botWriters = new HashMap<>();
+
+    private final ReentrantLock clientSocketsLock = new ReentrantLock();
+    private final ReentrantLock clientWritersLock = new ReentrantLock();
+    private final ReentrantLock serverRoomsLock = new ReentrantLock();
+    private final ReentrantLock socketFingerprintLock = new ReentrantLock();
+    private final ReentrantLock botWritersLock = new ReentrantLock();
 
 
     public ChatServer(int port)
@@ -81,17 +86,26 @@ public class ChatServer
 
                     PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
 
-                    lock.lock();
-
+                    clientSocketsLock.lock();
                     try
                     {
                         clientSockets.add(clientSocket);
+                    }
+                    finally
+                    {
+                        clientSocketsLock.unlock();
+                    }
+
+                    clientWritersLock.lock();
+                    try
+                    {
                         clientWriters.add(writer);
                     }
                     finally
                     {
-                        lock.unlock();
+                        clientWritersLock.unlock();
                     }
+
 
                     Thread.ofVirtual().start(() -> {
                         try
@@ -141,7 +155,7 @@ public class ChatServer
             System.out.println("Error closing server: " + e.getMessage());
         }
 
-        lock.lock();
+        clientSocketsLock.lock();
         try
         {
             for (Socket socket : clientSockets)
@@ -160,11 +174,20 @@ public class ChatServer
             }
 
             clientSockets.clear();
+        }
+        finally
+        {
+            clientSocketsLock.unlock();
+        }
+
+        clientWritersLock.lock();
+        try
+        {
             clientWriters.clear();
         }
         finally
         {
-            lock.unlock();
+            clientWritersLock.unlock();
         }
     }
 
@@ -551,7 +574,7 @@ public class ChatServer
             }
             else if (line.startsWith("/leave"))
             {
-                lock.lock();
+                serverRoomsLock.lock();
 
                 try
                 {
@@ -584,7 +607,7 @@ public class ChatServer
                 }
                 finally
                 {
-                    lock.unlock();
+                    serverRoomsLock.unlock();
                 }
             }
             else if (line.equals("/listrooms"))
@@ -614,7 +637,7 @@ public class ChatServer
 
     private PrintWriter findBotWriter(String roomName)
     {
-        lock.lock();
+        botWritersLock.lock();
 
         try
         {
@@ -622,24 +645,42 @@ public class ChatServer
         }
         finally
         {
-            lock.unlock();
+            botWritersLock.unlock();
         }
     }
 
 
     private void cleanupConnection(Socket clientSocket, PrintWriter writer, String username)
     {
-        lock.lock();
+        clientSocketsLock.lock();
 
         try
         {
             clientSockets.remove(clientSocket);
+        }
+        finally
+        {
+            clientSocketsLock.unlock();
+        }
+
+        clientWritersLock.lock();
+        try
+        {
             clientWriters.remove(writer);
+        }
+        finally
+        {
+            clientWritersLock.unlock();
+        }
+
+        socketFingerprintLock.lock();
+        try
+        {
             socketToFingerprintMap.remove(clientSocket);
         }
         finally
         {
-            lock.unlock();
+            socketFingerprintLock.unlock();
         }
 
         try
@@ -651,7 +692,7 @@ public class ChatServer
             System.out.println("Error closing client socket: " + e.getMessage());
         }
 
-        if (username != null)
+        if (username != null && !username.equals("AI_Bot"))
         {
             broadcast("[Server] " + username + " has left the chat.", null);
         }
@@ -659,7 +700,7 @@ public class ChatServer
 
     private void broadcast(String message, PrintWriter sender)
     {
-        lock.lock();
+        clientWritersLock.lock();
 
         try
         {
@@ -673,13 +714,13 @@ public class ChatServer
         }
         finally
         {
-            lock.unlock();
+            clientWritersLock.unlock();
         }
     }
 
     private ServerRoom getOrCreateRoom(String roomName)
     {
-        lock.lock();
+        serverRoomsLock.lock();
         try
         {
             boolean roomExists = serverRooms.containsKey(roomName);
@@ -707,13 +748,15 @@ public class ChatServer
         }
         finally
         {
-            lock.unlock();
+            serverRoomsLock.unlock();
         }
     }
 
 
-    private synchronized void addClientToRoom(String roomName, Socket socket, PrintWriter writer)
+    private void addClientToRoom(String roomName, Socket socket, PrintWriter writer)
     {
+        serverRoomsLock.lock();
+
         try
         {
             ServerRoom room = serverRooms.get(roomName);
@@ -729,11 +772,15 @@ public class ChatServer
             System.out.println("Error adding client to room " + roomName + ": " + e.getMessage());
             e.printStackTrace();
         }
+        finally
+        {
+            serverRoomsLock.unlock();
+        }
     }
 
     private void removeClientFromRoom(String roomName, Socket socket, PrintWriter writer)
     {
-        lock.lock();
+        serverRoomsLock.lock();
 
         try
         {
@@ -762,7 +809,7 @@ public class ChatServer
         }
         finally
         {
-            lock.unlock();
+            serverRoomsLock.unlock();
         }
     }
 
@@ -790,8 +837,10 @@ public class ChatServer
     }
 
 
-    public static void main(String[] args) {
-        if (args.length < 1) {
+    public static void main(String[] args)
+    {
+        if (args.length < 1)
+        {
             System.out.println("Usage: java ChatServer <port>");
             return;
         }
@@ -800,11 +849,13 @@ public class ChatServer
 
         ChatServer server = new ChatServer(port);
 
-        // Pre-register a few test users
-        try {
+        try
+        {
             server.clientAuth.registerClient("charlie", "test123");
             System.out.println("Test users registered: alice, bob");
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             System.out.println("Error registering test users: " + e.getMessage());
             return;
         }
