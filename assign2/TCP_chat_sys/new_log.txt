@@ -1,0 +1,4 @@
+[Server] alice has joined the room.
+[Server] tom has joined the room.
+tom: sup
+tom: como é q se fala com o bot

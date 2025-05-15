@@ -163,11 +163,13 @@ public class ClientTokenManager {
                 }
             }
 
-            for (Map.Entry<String, Map<String, UserToken>> entry : tokensByUsername.entrySet()) {
+            for (Map.Entry<String, Map<String, UserToken>> entry : tokensByUsername.entrySet())
+            {
                 Map<String, UserToken> userTokens = entry.getValue();
                 UserToken userToken = userTokens.get(tokenValue);
 
-                if (userToken != null) {
+                if (userToken != null)
+                {
                     userToken.updateLastAccessTime();
                     return userToken.getUsername();
                 }
@@ -189,7 +191,8 @@ public class ClientTokenManager {
 
             UserToken token = tokensByFingerprint.get(deviceFingerprint);
 
-            if (token != null) {
+            if (token != null)
+            {
                 token.updateLastAccessTime();
                 System.out.println("Found token for fingerprint: " + deviceFingerprint + ", username: " + token.getUsername());
                 return token.getUsername();

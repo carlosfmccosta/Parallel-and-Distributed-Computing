@@ -18,3 +18,22 @@ alice: hi @bot how is portugal fammously recognised by?
 [Server] alice has joined the room.
 [Server] alice has left the room.
 [Server] alice has joined the room.
+[Server] alice has left the room.
+[Server] alice has joined the room.
+[Server] carlos has joined the room.
+alice: ola
+carlos: ola
+carlos: @bot ola
+[Bot]: OLA!
+[Server] tom has joined the room.
+alice: ol
+tom: sup bitches
+[Server] alice has left the room.
+[Server] tom has left the room.
+carlos: ciwuecno
+carlos: @bot qual é a capital de portugal
+[Bot]: A fun conversation!\n\nLisboa! (That's Lisbon in English, the capital of Portugal!)
+carlos: @bot qual é a capital de espanha
+[Bot]: A question for the bot!\n\nThe answer is: Madrid
+carlos: @bot volta a responder às duas mensagens anteriores
+[Bot]: A conversa foi interrompida por um tempo!\n\nRespondendo às suas perguntas anteriores:\n\n* A capital de Portugal é Lisboa.\n* A capital da Espanha é Madrid.\n\nEspero que isso tenha sido útil, Carlos!

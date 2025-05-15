@@ -27,3 +27,8 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### ficheiros especificocs a ignorar
+user_tokens.dat
+auth_token.txt
+device_id.txt
