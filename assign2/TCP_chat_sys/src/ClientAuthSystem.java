@@ -1,15 +1,22 @@
 import java.io.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.util.concurrent.*;
 import java.util.Map;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 class ClientAuthSystem
 {
     private final Map<String, UserCredentials> registeredUsers = new ConcurrentHashMap<>();
     private static final String FILE_PATH = "users.txt";
+
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final Lock readLock = rwLock.readLock();
+    private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(5);
 
     //class to store salt and hashed password together
     private static class UserCredentials
@@ -36,28 +43,63 @@ class ClientAuthSystem
 
     public ClientAuthSystem()
     {
-        loadUsersFromFile();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor())
+        {
+            Future<?> future = executor.submit(this::loadUsersFromFile);
+
+            try
+            {
+                future.get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+            }
+            catch (TimeoutException e)
+            {
+                System.err.println("Loading users took too long: " + e.getMessage());
+                future.cancel(true);
+            }
+            catch (Exception e)
+            {
+                System.err.println("Error loading users: " + e.getMessage());
+            }
+        }
     }
 
     public boolean registerClient(String username, String plainTextPassword) throws NoSuchAlgorithmException
     {
-        if (registeredUsers.containsKey(username))
+        readLock.lock();
+
+        try
         {
+            if (registeredUsers.containsKey(username))
+            {
+                return false;
+            }
+        }
+        finally
+        {
+            readLock.unlock();
+        }
+
+        UserCredentials credentials;
+        try
+        {
+            // Generate a random salt
+            SecureRandom random = new SecureRandom();
+            byte[] saltBytes = new byte[16];
+            random.nextBytes(saltBytes);
+            String salt = Base64.getEncoder().encodeToString(saltBytes);
+
+            String hashedPassword = hashPassword(plainTextPassword, salt);
+            credentials = new UserCredentials(hashedPassword, salt);
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            System.err.println("Error hashing password: " + e.getMessage());
             return false;
         }
 
-        //generate a random salt
-        SecureRandom random = new SecureRandom();
-        byte[] saltBytes = new byte[16];
-        random.nextBytes(saltBytes);
-        String salt = Base64.getEncoder().encodeToString(saltBytes);
+        registeredUsers.put(username, credentials);
 
-        String hashedPassword = hashPassword(plainTextPassword, salt);
-        UserCredentials clientCredentials = new UserCredentials(hashedPassword, salt);
-
-        registeredUsers.put(username, clientCredentials);
-
-        saveUserToFile(username, clientCredentials);
+        saveUserToFile(username, credentials);
 
         return true;
     }
@@ -65,16 +107,33 @@ class ClientAuthSystem
 
     public boolean verifyClient(String username, String attemptedPassword) throws NoSuchAlgorithmException
     {
-        UserCredentials credentials = registeredUsers.get(username);
+        UserCredentials credentials;
+        readLock.lock();
 
-        if (credentials == null)
+        try
         {
-            return false;
+            credentials = registeredUsers.get(username);
+
+            if (credentials == null)
+            {
+                return false;
+            }
+        }
+        finally
+        {
+            readLock.unlock();
         }
 
-        String hashedAttempt = hashPassword(attemptedPassword, credentials.getSalt());
-
-        return hashedAttempt.equals(credentials.getPasswordHash());
+        try
+        {
+            String hashedAttempt = hashPassword(attemptedPassword, credentials.getSalt());
+            return hashedAttempt.equals(credentials.getPasswordHash());
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            System.err.println("Error verifying password: " + e.getMessage());
+            return false;
+        }
     }
 
     private String hashPassword(String password, String salt) throws NoSuchAlgorithmException

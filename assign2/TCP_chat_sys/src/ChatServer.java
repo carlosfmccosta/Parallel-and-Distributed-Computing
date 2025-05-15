@@ -566,6 +566,18 @@ public class ChatServer
                     tokenManager.updateDefaultRoom(username, getDeviceFingerprint(clientSocket), currentRoomName);
 
                     writer.println("You have left the room and joined the \'general\' room.");
+
+                    lastMessages = currentRoom.getLastFiveMessages();
+
+                    if (!lastMessages.isEmpty())
+                    {
+                        for (String msg : lastMessages)
+                        {
+                            writer.println(msg);
+                            writer.flush();
+                        }
+                    }
+
                     writer.flush();
 
                     currentRoom.broadcast("[Server] " + username + " has joined the room.", writer);
