@@ -3,15 +3,19 @@ import java.nio.file.*;
 import java.security.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ClientTokenManager {
 
     private static final String TOKENS_FILE = "user_tokens.dat";
     private final Map<String, UserToken> tokensByFingerprint = new ConcurrentHashMap<>();
     private final Map<String, Map<String, UserToken>> tokensByUsername = new ConcurrentHashMap<>();
-    private final ReentrantLock fileLock = new ReentrantLock();
     private final Long tokenLim = 86400000L;
+
+    private final ReadWriteLock mapsLock = new ReentrantReadWriteLock();
+    private final ReentrantLock fileLock = new ReentrantLock();
 
     public static class UserToken implements Serializable
     {
@@ -19,7 +23,7 @@ public class ClientTokenManager {
 
         private final String username;
         private final String deviceFingerprint;
-        private final String defaultRoom;
+        private String defaultRoom;
         private final String tokenValue;
         private final long creationTime;
         private long lastAccessTime;
@@ -32,6 +36,10 @@ public class ClientTokenManager {
             this.tokenValue = tokenValue;
             this.creationTime = System.currentTimeMillis();
             this.lastAccessTime = creationTime;
+        }
+
+        public void setDefaultRoom(String defaultRoom) {
+            this.defaultRoom = defaultRoom;
         }
 
         public String getUsername()
@@ -81,74 +89,118 @@ public class ClientTokenManager {
 
         UserToken token = new UserToken(username, deviceFingerprint, defaultRoom, tokenValue);
 
-        tokensByFingerprint.put(deviceFingerprint, token);
+        mapsLock.writeLock().lock();
+        try
+        {
+            UserToken oldToken = tokensByFingerprint.get(deviceFingerprint);
 
-        tokensByUsername.computeIfAbsent(username, k -> new ConcurrentHashMap<>()).put(tokenValue, token);
+            if (oldToken != null)
+            {
+                Map<String, UserToken> userTokens = tokensByUsername.get(oldToken.getUsername());
+
+                if (userTokens != null)
+                {
+                    userTokens.remove(oldToken.getTokenValue());
+
+                    if (userTokens.isEmpty())
+                    {
+                        tokensByUsername.remove(oldToken.getUsername());
+                    }
+                }
+            }
+
+            tokensByFingerprint.put(deviceFingerprint, token);
+            tokensByUsername.computeIfAbsent(username, k -> new ConcurrentHashMap<>()).put(tokenValue, token);
+        }
+        finally {
+            mapsLock.writeLock().unlock();
+        }
 
         System.out.println("Generated token for user: " + username + " with fingerprint: " + deviceFingerprint);
-        saveTokensToFile();
+
+        Thread saveThread = Thread.ofVirtual().start(() -> saveTokensToFile());
 
         return tokenValue;
     }
 
     private String generateUniqueTokenValue()
     {
-        SecureRandom random = new SecureRandom();
-        byte[] bytes = new byte[32]; // 256 bits
-        random.nextBytes(bytes);
+        try
+        {
+            SecureRandom random = new SecureRandom();
+            byte[] bytes = new byte[32]; // 256 bits
+            random.nextBytes(bytes);
 
-        return Base64.getEncoder().encodeToString(bytes);
+            return Base64.getEncoder().encodeToString(bytes);
+        }
+        catch (Exception e)
+        {
+            System.err.println("Error generating random token: " + e.getMessage());
+
+            return UUID.randomUUID().toString() + UUID.randomUUID().toString();
+        }
     }
 
     public String findUsernameByTokenAndFingerprint(String tokenValue, String deviceFingerprint)
     {
-        UserToken token = tokensByFingerprint.get(deviceFingerprint);
+        mapsLock.readLock().lock();
 
-        if (token != null)
+        try
         {
-            Map<String, UserToken> userTokens = tokensByUsername.get(token.getUsername());
+            UserToken token = tokensByFingerprint.get(deviceFingerprint);
 
-            if (userTokens != null)
-            {
-                for (UserToken userToken : userTokens.values())
-                {
-                    if (userToken.getTokenValue().equals(tokenValue))
-                    {
-                        userToken.updateLastAccessTime();
+            if (token != null) {
+                Map<String, UserToken> userTokens = tokensByUsername.get(token.getUsername());
 
-                        return userToken.getUsername();
+                if (userTokens != null) {
+                    for (UserToken userToken : userTokens.values()) {
+                        if (userToken.getTokenValue().equals(tokenValue)) {
+                            userToken.updateLastAccessTime();
+
+                            return userToken.getUsername();
+                        }
                     }
                 }
             }
-        }
 
-        for (Map.Entry<String, Map<String, UserToken>> entry : tokensByUsername.entrySet())
-        {
-            Map<String, UserToken> userTokens = entry.getValue();
-            UserToken userToken = userTokens.get(tokenValue);
+            for (Map.Entry<String, Map<String, UserToken>> entry : tokensByUsername.entrySet()) {
+                Map<String, UserToken> userTokens = entry.getValue();
+                UserToken userToken = userTokens.get(tokenValue);
 
-            if (userToken != null)
-            {
-                userToken.updateLastAccessTime();
-                return userToken.getUsername();
+                if (userToken != null) {
+                    userToken.updateLastAccessTime();
+                    return userToken.getUsername();
+                }
             }
-        }
 
-        return null;
+            return null;
+        }
+        finally
+        {
+            mapsLock.readLock().unlock();
+        }
     }
 
     public String findUsernameByFingerprint(String deviceFingerprint)
     {
-        UserToken token = tokensByFingerprint.get(deviceFingerprint);
+        mapsLock.readLock().lock();
 
-        if (token != null)
-        {
-            token.updateLastAccessTime();
-            System.out.println("Found token for fingerprint: " + deviceFingerprint + ", username: " + token.getUsername());
-            return token.getUsername();
+        try {
+
+            UserToken token = tokensByFingerprint.get(deviceFingerprint);
+
+            if (token != null) {
+                token.updateLastAccessTime();
+                System.out.println("Found token for fingerprint: " + deviceFingerprint + ", username: " + token.getUsername());
+                return token.getUsername();
+            }
+
+            return null;
         }
-
-        return null;
+        finally
+        {
+            mapsLock.readLock().unlock();
+        }
     }
 
     public void updateDefaultRoom(String username, String deviceFingerprint, String newRoom)
@@ -164,14 +216,23 @@ public class ClientTokenManager {
 
     public String getDefaultRoomForFingerprint(String deviceFingerprint)
     {
-        UserToken token = tokensByFingerprint.get(deviceFingerprint);
+        mapsLock.readLock().lock();
 
-        if (token != null) {
-            return token.getDefaultRoom();
+        try {
+            UserToken token = tokensByFingerprint.get(deviceFingerprint);
+
+            if (token != null) {
+                return token.getDefaultRoom();
+            }
+
+            return "general";
         }
-
-        return "general";
+        finally
+        {
+            mapsLock.readLock().unlock();
+        }
     }
+
 
     public void removeTokensForUsername(String username)
     {
@@ -258,34 +319,51 @@ public class ClientTokenManager {
         long now = System.currentTimeMillis();
         List<UserToken> tokensToRemove = new ArrayList<>();
 
-        for (UserToken token : tokensByFingerprint.values())
+        mapsLock.readLock().lock();
+
+        try
         {
-            if (now - token.getLastAccessTime() > tokenLim)
+            for (UserToken token : tokensByFingerprint.values())
             {
-                tokensToRemove.add(token);
-            }
-        }
-
-        for (UserToken token : tokensToRemove)
-        {
-            tokensByFingerprint.remove(token.getDeviceFingerprint());
-
-            Map<String, UserToken> userTokens = tokensByUsername.get(token.getUsername());
-            if (userTokens != null)
-            {
-                userTokens.remove(token.getTokenValue());
-
-                if (userTokens.isEmpty())
+                if (now - token.getLastAccessTime() > tokenLim)
                 {
-                    tokensByUsername.remove(token.getUsername());
+                    tokensToRemove.add(token);
                 }
             }
+        }
+        finally
+        {
+            mapsLock.readLock().unlock();
         }
 
         if (!tokensToRemove.isEmpty())
         {
-            System.out.println("Purged " + tokensToRemove.size() + " expired tokens.");
-            saveTokensToFile();
+            mapsLock.writeLock().lock();
+
+            try
+            {
+                for (UserToken token : tokensToRemove)
+                {
+                    tokensByFingerprint.remove(token.getDeviceFingerprint());
+                    Map<String, UserToken> userTokens = tokensByUsername.get(token.getUsername());
+
+                    if (userTokens != null)
+                    {
+                        userTokens.remove(token.getTokenValue());
+
+                        if (userTokens.isEmpty())
+                        {
+                            tokensByUsername.remove(token.getUsername());
+                        }
+                    }
+                }
+
+                System.out.println("Purged " + tokensToRemove.size() + " expired tokens.");
+            }
+            finally
+            {
+                mapsLock.writeLock().unlock();
+            }
         }
     }
 }

@@ -5,17 +5,23 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ServerRoom {
-
+public class ServerRoom
+{
     private static final int MAX_MESSAGE_COUNT = 5;
-    String name;
-    List<Socket> clients = new ArrayList<>();
-    List<PrintWriter> writers = new ArrayList<>();
+    private final String name;
+    private final List<Socket> clients;
+    private final List<PrintWriter> writers;
 
-    public ServerRoom(String name)
-    {
+    private final ReadWriteLock lock;
+
+    public ServerRoom(String name) {
         this.name = name;
+        this.clients = new ArrayList<>();
+        this.writers = new ArrayList<>();
+        this.lock = new ReentrantReadWriteLock();
     }
 
     public String getName()
@@ -23,37 +29,67 @@ public class ServerRoom {
         return name;
     }
 
-    public synchronized void addClient(Socket socket, PrintWriter writer)
+    public void addClient(Socket socket, PrintWriter writer)
     {
-        clients.add(socket);
-        writers.add(writer);
+        lock.writeLock().lock();
+
+        try
+        {
+            clients.add(socket);
+            writers.add(writer);
+        }
+        finally
+        {
+            lock.writeLock().unlock();
+        }
     }
 
-    public synchronized boolean isEmpty() {
-        return clients.isEmpty();
+
+    public boolean isEmpty()
+    {
+        lock.readLock().lock();
+
+        try
+        {
+            return clients.isEmpty();
+        }
+        finally
+        {
+            lock.readLock().unlock();
+        }
     }
 
-    public synchronized void removeClient(Socket socket, PrintWriter writer)
+    public void removeClient(Socket socket, PrintWriter writer)
     {
+        lock.writeLock().lock();
+
         try
         {
             clients.remove(socket);
             writers.remove(writer);
 
-            boolean b = !getName().equals("general");
+            boolean isCostumRoom = !getName().equals("general");
 
-            if (clients.isEmpty() && b)
+            if (clients.isEmpty() && isCostumRoom)
             {
+                lock.writeLock().unlock();
+
                 File logFile = new File(name + "_log.txt");
                 if (logFile.exists())
                 {
                     logFile.delete();
                 }
+
+                lock.writeLock().lock();
             }
         }
         catch (Exception e)
         {
             System.out.println("Error removing client from room " + name + ": " + e.getMessage());
+        }
+        finally
+        {
+            lock.writeLock().unlock();
         }
     }
 
