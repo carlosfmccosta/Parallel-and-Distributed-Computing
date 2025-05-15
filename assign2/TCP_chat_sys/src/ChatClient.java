@@ -502,21 +502,7 @@ public class ChatClient {
         return null;
     }
 
-
     public static void main(String[] args) {
-        String ip = "localhost";
-        int port = 8080;
-
-        if (args.length >= 2) {
-            ip = args[0];
-            port = Integer.parseInt(args[1]);
-        }
-
-        ChatClient client = new ChatClient(ip, port);
-        client.start_client();
-    }
-
-    /*public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.print("Enter server IP: ");
@@ -529,5 +515,5 @@ public class ChatClient {
         client.start_client();
 
         scanner.close();
-    }*/
+    }
 }
