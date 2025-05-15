@@ -47,10 +47,17 @@ java -cp out ChatSystemLauncher
 ```
 
 ### Step 6: Join as a Client
+
 In another terminal, you can join the system by running:
 ```bash
 java -cp out ChatClient
 ```
+
+**Initially there must not have the filles named**: 
+- device_id.txt
+- auth_token.txt
+- user_tokens.dat
+
 
 # How to:
 ## Join as a Client
