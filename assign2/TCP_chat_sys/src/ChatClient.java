@@ -20,7 +20,7 @@ public class ChatClient {
     private static final AtomicBoolean inRoomTransition = new AtomicBoolean(false);
     private static final String DEVICE_ID_FILE = "device_id.txt";
     private static final String AUTH_TOKEN_FILE = "auth_token.txt";
-    private String authToken;
+    private volatile String authToken;
 
     public ChatClient(String serverAddress, int port) throws IllegalArgumentException
     {
@@ -491,7 +491,7 @@ public class ChatClient {
         return null;
     }
 
-    /*
+
     public static void main(String[] args) {
         String ip = "localhost";
         int port = 8080;
@@ -503,9 +503,9 @@ public class ChatClient {
 
         ChatClient client = new ChatClient(ip, port);
         client.start_client();
-    }*/
+    }
 
-    public static void main(String[] args) {
+    /*public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.print("Enter server IP: ");
@@ -518,5 +518,5 @@ public class ChatClient {
         client.start_client();
 
         scanner.close();
-    }
+    }*/
 }

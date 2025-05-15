@@ -37,3 +37,8 @@ carlos: @bot qual é a capital de espanha
 [Bot]: A question for the bot!\n\nThe answer is: Madrid
 carlos: @bot volta a responder às duas mensagens anteriores
 [Bot]: A conversa foi interrompida por um tempo!\n\nRespondendo às suas perguntas anteriores:\n\n* A capital de Portugal é Lisboa.\n* A capital da Espanha é Madrid.\n\nEspero que isso tenha sido útil, Carlos!
+[Server] alice has joined the room.
+alice: hi @bot how are u today
+[Bot]: Hi Alice! I'm doing well, thanks for asking. By the way, Carlos asked about the capitals of Portugal and Spain earlier, and I didn't get a chance to respond yet. The capital of Portugal is Lisbon, and the capital of Spain is Madrid.
+hi @bot how are u today
+[Server] alice has left the room.

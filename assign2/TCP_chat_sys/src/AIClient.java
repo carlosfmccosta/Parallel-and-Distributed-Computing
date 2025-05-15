@@ -5,6 +5,8 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Lock;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -17,9 +19,23 @@ public class AIClient
     private final String ollamaUrl;
     private final String aiModel;
     private String currentRoom;
+
     private long lastResponseTime = 0;
     private final long RESPONSE_COOLDOWN_MS = 3000;
     private final int MAX_CONTEXT_LINES = 5;
+
+    private final Lock responseLock = new ReentrantLock();
+    private final Lock contextLock = new ReentrantLock();
+
+    private volatile boolean isRunning = true;
+    private volatile boolean isConnected = false;
+    private SSLSocket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+
+    private final long HEARTBEAT_INTERVAL_MS = 30000;
+    private final long CONNECTION_TIMEOUT_MS = 60000;
+    private volatile long lastHeartbeatReceived = System.currentTimeMillis();
 
     public AIClient(String serverIp, int port, String ollamaUrl, String aiModel, String currentRoom)
     {
@@ -32,101 +48,102 @@ public class AIClient
 
     public void start()
     {
-        while (true)
+        Thread.startVirtualThread(this::heartbeatMonitor);
+
+        while (isRunning)
         {
             try
             {
                 System.out.println("Attempting to connect to server...");
+                connectToServer();
 
-                KeyStore trustStore = KeyStore.getInstance("JKS");
-
-                try (FileInputStream tsFile = new FileInputStream("truststore.jks"))
+                if (isConnected)
                 {
-                    trustStore.load(tsFile, "123456".toCharArray());
-                }
+                    Thread.startVirtualThread(this::handleMessages);
 
-                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(trustStore);
+                    Thread.startVirtualThread(this::sendHeartbeats);
 
-                SSLContext sslContext = SSLContext.getInstance("TLS");
-                sslContext.init(null, tmf.getTrustManagers(), null);
-
-                SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-                SSLSocket socket = (SSLSocket) sslSocketFactory.createSocket(serverIp, port);
-
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-
-                if (!authenticateBot(in, out))
-                {
-                    System.err.println("Authentication failed. Retrying in 5 seconds...");
-                    socket.close();
-                    TimeUnit.SECONDS.sleep(5);
-                    continue;
-                }
-
-                System.out.println("Connected to chat server. Waiting for messages...");
-
-                Thread.startVirtualThread(() -> {
-                    try
+                    while (isConnected && isRunning)
                     {
-                        String message;
-
-                        while ((message = in.readLine()) != null)
-                        {
-                            System.out.println("Received message: " + message);
-
-                            if (message.contains("@bot"))
-                            {
-                                String response = generateAIResponse(message);
-                                sendBotResponse(response, out);
-                            }
-                        }
+                        Thread.sleep(1000);
                     }
-                    catch (IOException e)
-                    {
-                        System.err.println("Error reading from server: " + e.getMessage());
-                    }
-                });
-
-                break;
+                }
             }
             catch (IOException | InterruptedException | GeneralSecurityException e)
             {
-                System.err.println("Connection failed, retrying in 5 seconds...");
-                e.printStackTrace();
-                try
-                {
-                    TimeUnit.SECONDS.sleep(5);
-                }
-                catch (InterruptedException ie)
-                {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
+                handleConnectionFailure(e);
             }
         }
     }
 
-    private boolean waitForAuthRequest(BufferedReader in) throws IOException
+    private void connectToServer() throws IOException, GeneralSecurityException
+    {
+        KeyStore trustStore = KeyStore.getInstance("JKS");
+
+        try (FileInputStream tsFile = new FileInputStream("truststore.jks"))
+        {
+            trustStore.load(tsFile, "123456".toCharArray());
+        }
+
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(trustStore);
+
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, tmf.getTrustManagers(), null);
+
+        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+        socket = (SSLSocket) sslSocketFactory.createSocket(serverIp, port);
+
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        out = new PrintWriter(socket.getOutputStream(), true);
+
+        if (authenticateBot())
+        {
+            isConnected = true;
+            lastHeartbeatReceived = System.currentTimeMillis();
+            System.out.println("Connected to chat server. Waiting for messages...");
+        }
+        else
+        {
+            closeConnection();
+        }
+    }
+
+    private void closeConnection()
+    {
+        isConnected = false;
+
+        try
+        {
+            if (in != null) in.close();
+            if (out != null) out.close();
+            if (socket != null) socket.close();
+        }
+        catch (IOException e)
+        {
+            System.err.println("Error closing connection: " + e.getMessage());
+        }
+    }
+
+    private boolean waitForAuthRequest() throws IOException
     {
         int maxTries = 5;
 
         while (maxTries-- > 0)
         {
             String serverMessage = in.readLine();
+
             if (serverMessage == null) return false;
             if ("AUTH_REQUEST".equals(serverMessage)) return true;
 
             System.out.println("Waiting for AUTH_REQUEST, got instead: " + serverMessage);
         }
-
         return false;
     }
 
-    private boolean authenticateBot(BufferedReader in, PrintWriter out) throws IOException
+    private boolean authenticateBot() throws IOException
     {
-        if (!waitForAuthRequest(in))
+        if (!waitForAuthRequest())
         {
             System.out.println("Did not receive AUTH_REQUEST from server in time.");
             return false;
@@ -182,32 +199,202 @@ public class AIClient
         }
     }
 
-    private void sendBotResponse(String response, PrintWriter out)
+    private void handleMessages()
     {
-        System.out.println("[Bot] Sending response to server and room " + currentRoom + " : " + response);
-        out.println("[Bot]: " + response);
+        try
+        {
+            String message;
+
+            while (isConnected && (message = in.readLine()) != null)
+            {
+                updateHeartbeatTimestamp();
+
+                if (message.equals("HEARTBEAT"))
+                {
+                    out.println("HEARTBEAT_ACK");
+                    continue;
+                }
+
+                System.out.println("Received message: " + message);
+
+                if (message.contains("@bot"))
+                {
+                    String response = generateAIResponse(message);
+                    sendBotResponse(response);
+                }
+
+                contextLock.lock();
+
+                try
+                {
+                    saveMessageToContext(message);
+                }
+                finally
+                {
+                    contextLock.unlock();
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            if (isConnected)
+            {
+                System.err.println("Error reading from server: " + e.getMessage());
+                handleDisconnect();
+            }
+        }
+    }
+
+    private void saveMessageToContext(String message)
+    {
+        try
+        {
+            File logFile = new File(currentRoom + "_log.txt");
+            boolean fileExists = logFile.exists();
+
+            try (FileWriter fw = new FileWriter(logFile, true);
+                 BufferedWriter bw = new BufferedWriter(fw))
+            {
+                if (!fileExists)
+                {
+                    logFile.getParentFile().mkdirs();
+                }
+
+                bw.write(message);
+                bw.newLine();
+            }
+        }
+        catch (IOException e)
+        {
+            System.err.println("Error saving message to context: " + e.getMessage());
+        }
+    }
+
+    private void updateHeartbeatTimestamp()
+    {
+        lastHeartbeatReceived = System.currentTimeMillis();
+    }
+
+    private void sendHeartbeats()
+    {
+        while (isConnected && isRunning)
+        {
+            try
+            {
+                Thread.sleep(HEARTBEAT_INTERVAL_MS);
+
+                if (isConnected)
+                {
+                    out.println("HEARTBEAT");
+                    System.out.println("Sent heartbeat to server");
+                }
+            }
+            catch (InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private void heartbeatMonitor()
+    {
+        while (isRunning)
+        {
+            try
+            {
+                Thread.sleep(5000);
+
+                if (isConnected)
+                {
+                    long timeSinceLastHeartbeat = System.currentTimeMillis() - lastHeartbeatReceived;
+
+                    if (timeSinceLastHeartbeat > CONNECTION_TIMEOUT_MS)
+                    {
+                        System.out.println("No heartbeat received for " + (timeSinceLastHeartbeat / 1000) + " seconds. Reconnecting...");handleDisconnect();
+                    }
+                }
+            }
+            catch (InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private void handleDisconnect()
+    {
+        closeConnection();
+    }
+
+    private void handleConnectionFailure(Exception e)
+    {
+        closeConnection();
+        System.err.println("Connection failed, retrying in 5 seconds...");
+        e.printStackTrace();
+        try
+        {
+            TimeUnit.SECONDS.sleep(5);
+        }
+        catch (InterruptedException ie)
+        {
+            Thread.currentThread().interrupt();
+            isRunning = false;
+        }
+    }
+
+    private void sendBotResponse(String response)
+    {
+        if (isConnected && out != null)
+        {
+            System.out.println("[Bot] Sending response to server and room " + currentRoom + " : " + response);
+            out.println("[Bot]: " + response);
+        }
     }
 
     private String generateAIResponse(String prompt)
     {
-        long now = System.currentTimeMillis();
+        responseLock.lock();
 
-        if (now - lastResponseTime < RESPONSE_COOLDOWN_MS)
+        try
         {
-            System.out.println("[Bot] Cooldown active. Sending wait message.");
-            return "Please wait a moment before asking again...";
-        }
+            long now = System.currentTimeMillis();
 
-        lastResponseTime = now;
+            if (now - lastResponseTime < RESPONSE_COOLDOWN_MS)
+            {
+                System.out.println("[Bot] Cooldown active. Sending wait message.");
+                return "Please wait a moment before asking again...";
+            }
+            lastResponseTime = now;
+        }
+        finally
+        {
+            responseLock.unlock();
+        }
 
         try
         {
             System.out.println("[Bot] Generating response for prompt: " + prompt);
 
-            List<String> context = getRoomContext();
-            String contextPrompt = buildContextPrompt(prompt, context);
+            List<String> context;
+            contextLock.lock();
 
-            String jsonRequest = String.format("{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}", aiModel, escapeJson(contextPrompt));
+            try
+            {
+                context = getRoomContext();
+            }
+            finally
+            {
+                contextLock.unlock();
+            }
+
+            String contextPrompt = buildContextPrompt(prompt, context);
+            String jsonRequest = String.format(
+                    "{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}",
+                    aiModel,
+                    escapeJson(contextPrompt)
+            );
 
             System.out.println("[Bot] JSON request to Ollama:\n" + jsonRequest);
 
@@ -217,7 +404,8 @@ public class AIClient
                     .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
                     .build();
 
-            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = HttpClient.newHttpClient()
+                    .send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200)
             {
@@ -241,7 +429,6 @@ public class AIClient
             System.out.println("[Bot] Generated AI Response: " + aiResponse);
 
             return aiResponse;
-
         }
         catch (Exception e)
         {
@@ -270,6 +457,7 @@ public class AIClient
             {
                 Deque<String> lastMessages = new ArrayDeque<>();
                 String line;
+
                 while ((line = reader.readLine()) != null)
                 {
                     if (!line.contains("[Bot]") && !line.trim().isEmpty())
@@ -319,8 +507,7 @@ public class AIClient
         return finalPrompt;
     }
 
-    private String escapeJson(String input)
-    {
+    private String escapeJson(String input) {
         String escapedInput = input.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
@@ -331,8 +518,33 @@ public class AIClient
         return escapedInput;
     }
 
+    public void changeRoom(String newRoom)
+    {
+        contextLock.lock();
+        try
+        {
+            this.currentRoom = newRoom;
+        }
+        finally
+        {
+            contextLock.unlock();
+        }
 
-    public static void main(String[] args) {
-        new AIClient("localhost", 8080, "http://localhost:11434", "llama3","general").start();
+        if (isConnected && out != null)
+        {
+            out.println("CHANGE_ROOM:" + newRoom);
+        }
+    }
+
+    public void shutdown()
+    {
+        isRunning = false;
+        closeConnection();
+    }
+
+    public static void main(String[] args)
+    {
+        AIClient client = new AIClient("localhost", 8080, "http://localhost:11434", "llama3", "general");
+        client.start();
     }
 }

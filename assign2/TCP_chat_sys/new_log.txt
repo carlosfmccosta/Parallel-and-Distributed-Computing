@@ -1,4 +1,4 @@
 [Server] alice has joined the room.
-[Server] tom has joined the room.
-tom: sup
-tom: como é q se fala com o bot
+alice: hi @bot how are u
+hi @bot how are u
+[Bot]: hi! i'm good, thanks for asking. what brings you here today?
