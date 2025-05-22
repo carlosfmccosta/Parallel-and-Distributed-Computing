@@ -52,6 +52,26 @@ public class ChatClient {
         this.authToken = loadAuthToken();
     }
 
+    public void start_client_with_reconnect() {
+
+        while(true) {
+            try {
+                System.out.println("Starting client...");
+                start_client();
+            } catch (Exception e) {
+                System.out.println("Error: " + e.getMessage());
+            }
+
+            System.out.println("Attempting to reconnect in 5 seconds...");
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                System.out.println("Connection lost: " + e.getMessage() + ". Trying again.");
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     public void start_client()
     {
         int maxAttempts = 3;
@@ -121,6 +141,8 @@ public class ChatClient {
                     catch (IOException e)
                     {
                         System.out.println("\nConnection closed.");
+
+                        //TENTAR RECONNECT NESTE CASO
                     }
                 });
 
@@ -512,7 +534,7 @@ public class ChatClient {
         int port = Integer.parseInt(scanner.nextLine());
 
         ChatClient client = new ChatClient(ip, port);
-        client.start_client();
+        client.start_client_with_reconnect();
 
         scanner.close();
     }
