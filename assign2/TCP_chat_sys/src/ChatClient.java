@@ -116,6 +116,8 @@ public class ChatClient {
                     return;
                 }
 
+                AtomicBoolean connectionClosed = new AtomicBoolean(false);
+
                 Thread.ofVirtual().start(() -> {
                     try {
                         String serverMsg;
@@ -141,8 +143,8 @@ public class ChatClient {
                     catch (IOException e)
                     {
                         System.out.println("\nConnection closed.");
-
-                        //TENTAR RECONNECT NESTE CASO
+                        connectionClosed.set(true); // Set the flag
+                        Thread.currentThread().interrupt();
                     }
                 });
 
@@ -150,6 +152,10 @@ public class ChatClient {
 
                 while (scanner.hasNextLine())
                 {
+
+                    if (connectionClosed.get()) break;
+
+
                     String input = scanner.nextLine();
                     currentInput = "";
 
