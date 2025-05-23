@@ -144,6 +144,7 @@ public class ChatClient {
                     {
                         System.out.println("\nConnection closed.");
                         connectionClosed.set(true); // Set the flag
+                        System.out.println("\nPress Enter to try reconnecting to server.");
                         Thread.currentThread().interrupt();
                     }
                 });
